@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=5">
+<link rel="manifest" href="manifest.json?v=6">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -518,6 +518,18 @@ button.lvrow:hover{background:var(--surface2)}
 .viewer.on{opacity:1}
 .viewer img{max-width:100%;max-height:100%;border-radius:8px}
 .viewer .iconbtn{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;background:rgba(255,255,255,.15);border-color:transparent;color:#fff}
+
+.livecta{display:flex;align-items:center;gap:12px;width:100%;max-width:380px;padding:12px 14px;border-radius:16px;border:1.5px solid var(--gold);background:var(--gold-soft);color:var(--fg);text-align:right;margin-top:4px;transition:transform .15s}
+.livecta:active{transform:scale(.98)}
+.livecta .lc-ic{width:42px;height:42px;border-radius:50%;background:var(--gold);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 0 0 0 rgba(215,38,43,.5);animation:ctap 2s infinite}
+@keyframes ctap{70%{box-shadow:0 0 0 12px rgba(215,38,43,0)}100%{box-shadow:0 0 0 0 rgba(215,38,43,0)}}
+.livecta .lc-tx{flex:1;min-width:0}
+.livecta b{display:block;font-family:var(--f-display);font-weight:600;font-size:15px}
+.livecta small{display:block;font-size:12px;color:var(--muted)}
+.livecta>svg{color:var(--gold)}
+.livecta.on{border-color:var(--ok);background:var(--ok-bg)}
+.livecta.on .lc-ic{background:var(--ok)}
+.mvoice.gone{opacity:.6}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -583,6 +595,6 @@ button.lvrow:hover{background:var(--surface2)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=5"></script>
+<script type="module" src="app.js?v=6"></script>
 </body>
 </html>

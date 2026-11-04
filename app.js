@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=5';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=6';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -529,6 +529,7 @@ function renderEmp() {
      </div>
      <div class="devline" id="devline"></div>
      <div class="devline">${ic('pin', 13)} ${esc(geoRuleText(emp))}</div>
+     <button class="livecta ${liveOn ? 'on' : ''}" id="liveCta" type="button"><span class="lc-ic">${ic('live', 22)}</span><span class="lc-tx"><b>${liveOn ? 'اللايف لوكيشن شغّال' : 'ابدأ لايف لوكيشن'}</b><small>${liveOn ? 'المالك شايف مكانك الآن · اضغط للتفاصيل' : 'شارك مكانك المباشر مع المالك'}</small></span>${ic('left', 18)}</button>
      <div class="slots" id="slots" style="grid-template-columns:repeat(${P.off ? 4 : P.fields.length},minmax(0,1fr))"></div>
      <div class="timer"><span class="muted small">مدة العمل اليوم</span><b class="num" id="wt">٠٠:٠٠:٠٠</b></div>
      ${notifCta()}
@@ -540,6 +541,7 @@ function renderEmp() {
    </section></div>`;
   mountProfile($('myProf'), emp, false);
   bindScan(); bindNotifCta(); updateEmpLive(true); updateBands();
+  $('liveCta').onclick = () => { vibrate(15); openTab('vLive'); if (!liveOn) startLive(); };
 }
 function notifCta() {
   const p = ('Notification' in window) ? Notification.permission : 'unsupported';
@@ -1034,7 +1036,7 @@ function renderChat() {
     const cap = ta.value.trim(); ta.value = ''; ta.oninput();
     toast('info', 'جارٍ إرسال الصورة…', '', 'الشات');
     try { const im = await packImage(f); await sendMedia('img', im.data, { w: im.w, h: im.h, thumb: im.thumb, text: cap }); }
-    catch (x) { toast('bad', 'لم تُرسل الصورة', x && x.message === 'big' ? 'الصورة كبيرة جداً' : 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); }
+    catch (x) { toast('bad', 'لم تُرسل الصورة', x && x.message === 'big' ? 'الصورة كبيرة جداً' : errWhy(x), 'الشات'); }
   };
   // رسالة صوتية
   $('chatMic').onclick = startRec;
@@ -1076,7 +1078,16 @@ function mediaHTML(m) {
   if (m.kind === 'voice') return `<button type="button" class="mvoice" data-voice="${esc(m.media)}" data-dur="${m.dur || 0}" aria-label="تشغيل الرسالة الصوتية"><span class="pp">${ic('play', 16)}</span><span class="wave"><i style="width:0%"></i></span><span class="num dur">${fmtDur(m.dur || 0)}</span></button>`;
   return '';
 }
+const errWhy = e => { const c = (e && (e.code || e.name || e.message)) || ''; if (String(c).includes('permission')) return 'قواعد الحماية في Firebase محتاجة تتحدّث (permission-denied)'; if (String(c).includes('unavailable') || String(c).includes('network')) return 'تأكد من الإنترنت وحاول مرة أخرى'; return 'حاول مرة أخرى' + (c ? ' · ' + c : ''); };
+const voiceReady = {};
+function hydrateVoices(box) {
+  box.querySelectorAll('[data-voice]').forEach(b => {
+    const id = b.dataset.voice; if (voiceReady[id]) return;
+    loadMedia(id).then(src => { if (src) voiceReady[id] = src; else b.classList.add('gone'); }).catch(e => { b.classList.add('gone'); b.dataset.err = errWhy(e); });
+  });
+}
 function hydrateImages(box) {
+  hydrateVoices(box);
   box.querySelectorAll('[data-media]').forEach(el => {
     const img = el.querySelector('img'); if (!img || img.dataset.full) return;
     loadMedia(el.dataset.media).then(src => { if (src) { img.src = src; img.dataset.full = '1'; el.classList.add('ok'); } else el.classList.add('gone'); }).catch(() => { });
@@ -1086,16 +1097,17 @@ let curAudio = null, curBtn = null;
 async function playVoice(btn) {
   if (curBtn === btn && curAudio) { if (curAudio.paused) curAudio.play(); else curAudio.pause(); return; }
   if (curAudio) { curAudio.pause(); curBtn && curBtn.classList.remove('playing'); }
-  curBtn = btn; btn.classList.add('loading');
-  const src = await loadMedia(btn.dataset.voice).catch(() => null); btn.classList.remove('loading');
-  if (!src) { toast('bad', 'تعذّر تشغيل الرسالة', 'ربما اتحذفت أو الإنترنت ضعيف', 'الشات'); return; }
-  const a = new Audio(src); curAudio = a;
+  curBtn = btn;
+  let src = voiceReady[btn.dataset.voice];
+  if (!src) { btn.classList.add('loading'); src = await loadMedia(btn.dataset.voice).catch(e => { btn.dataset.err = errWhy(e); return null; }); btn.classList.remove('loading'); if (src) voiceReady[btn.dataset.voice] = src; }
+  if (!src) { toast('bad', 'تعذّر تشغيل الرسالة', btn.dataset.err || 'ربما اتحذفت أو الإنترنت ضعيف', 'الشات'); return; }
+  const a = new Audio(); a.preload = 'auto'; a.src = src; curAudio = a;
   const bar = btn.querySelector('.wave i'), d = btn.querySelector('.dur'), pp = btn.querySelector('.pp'), total = +btn.dataset.dur || 0;
   a.ontimeupdate = () => { const T = isFinite(a.duration) && a.duration > 0 ? a.duration : total || 1; bar.style.width = Math.min(100, a.currentTime / T * 100) + '%'; d.textContent = fmtDur(a.currentTime); };
   a.onplay = () => { btn.classList.add('playing'); pp.innerHTML = ic('pause', 16); };
   a.onpause = () => { btn.classList.remove('playing'); pp.innerHTML = ic('play', 16); };
   a.onended = () => { bar.style.width = '0%'; d.textContent = fmtDur(total); curAudio = null; curBtn = null; };
-  a.play().catch(() => toast('bad', 'تعذّر تشغيل الصوت', '', 'الشات'));
+  a.play().catch(e => toast('bad', 'تعذّر تشغيل الصوت', (e && e.name === 'NotSupportedError') ? 'الجهاز ده مش بيدعم صيغة التسجيل دي' : 'اضغط تشغيل مرة تانية', 'الشات'));
 }
 function openViewer(src) {
   const v = document.createElement('div'); v.className = 'viewer';
@@ -1126,7 +1138,7 @@ async function startRec() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
   catch (e) { toast('bad', 'اسمح للتطبيق باستخدام المايك', 'من إعدادات المتصفح أو الجوال', 'الشات'); return; }
-  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  const type = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
   const mr = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 });
   rec = { mr, stream, chunks: [], t0: Date.now(), send: false, timer: null };
   mr.ondataavailable = e => { if (e.data && e.data.size) rec.chunks.push(e.data); };
@@ -1141,7 +1153,7 @@ async function startRec() {
       const data = await readURL(blob);
       if (data.length > 950000) { toast('bad', 'الرسالة الصوتية طويلة جداً', 'الحد الأقصى دقيقتين', 'الشات'); return; }
       await sendMedia('voice', data, { dur: Math.round(dur) });
-    } catch (e) { toast('bad', 'لم تُرسل الرسالة الصوتية', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); }
+    } catch (e) { toast('bad', 'لم تُرسل الرسالة الصوتية', errWhy(e), 'الشات'); }
   };
   mr.start(1000); vibrate(30);
   $('chatIn').hidden = true; $('chatMic').hidden = true; $('chatSend').hidden = true; $('chatImg').hidden = true; $('recBar').hidden = false;
