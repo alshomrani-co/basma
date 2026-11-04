@@ -1,0 +1,76 @@
+rules_version = '2';
+// قواعد الحماية لبصمة الشمراني
+// غيّر PASTE_OWNER_UID لنفس رقم المالك اللي في config.js قبل ما تلصقها في Firebase
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner() { return signedIn() && request.auth.uid == 'PASTE_OWNER_UID'; }
+    function empDoc() { return get(/databases/$(database)/documents/employees/$(request.auth.uid)); }
+    function isActiveEmp() {
+      return signedIn() && exists(/databases/$(database)/documents/employees/$(request.auth.uid)) && empDoc().data.active == true;
+    }
+    function today() { return int(math.floor((request.time.toMillis() + 10800000) / 86400000)); }
+    // كل بصمة: وقتها لازم يكون وقت السيرفر، ومينفعش تتعدّل بعد ما تتسجّل
+    function stampNew(k) {
+      return !(k in request.resource.data) || request.resource.data[k] == request.time;
+    }
+    function stampKept(k) {
+      return (k in resource.data)
+        ? (k in request.resource.data && request.resource.data[k] == resource.data[k])
+        : (!(k in request.resource.data) || request.resource.data[k] == request.time);
+    }
+
+    // الإعدادات: مواعيد العمل، فترة السماح، مواقع العمل — المالك بس اللي يعدّل
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isOwner();
+    }
+
+    // الموظفين: المالك يتحكم في كل حاجة، والموظف يقدر يغيّر بصمة جهازه وكلمة السر المؤقتة بس
+    match /employees/{uid} {
+      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow create, delete: if isOwner();
+      allow update: if isOwner()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cred', 'mustChange']));
+    }
+
+    // البصمات اليومية
+    match /days/{id} {
+      allow read: if isOwner() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isActiveEmp()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.day == today()
+        && id == request.auth.uid + '_' + string(today())
+        && stampNew('p1') && stampNew('p2') && stampNew('p3') && stampNew('p4');
+      allow update: if isOwner() || (isActiveEmp()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.day == resource.data.day
+        && resource.data.day == today()
+        && stampKept('p1') && stampKept('p2') && stampKept('p3') && stampKept('p4'));
+      allow delete: if isOwner();
+    }
+
+    // الموقع المباشر: كل موظف يكتب موقعه هو بس، والمالك يشوف الكل
+    match /live/{uid} {
+      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow write: if isActiveEmp() && request.auth.uid == uid;
+      allow delete: if isOwner();
+    }
+
+    // الشات الداخلي: كل الموظفين والمالك، والمالك بس اللي يحذف
+    match /chat/{id} {
+      allow read: if isOwner() || isActiveEmp();
+      allow create: if (isOwner() || isActiveEmp())
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.at == request.time
+        && request.resource.data.owner == isOwner();
+      allow delete: if isOwner();
+    }
+  }
+}
