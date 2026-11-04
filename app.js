@@ -1,7 +1,7 @@
 import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 /* ========== Firebase ========== */
 const app = initializeApp(firebaseConfig);
@@ -58,7 +58,11 @@ const I = {
   gear: "M10.33 4.32c.43-1.76 2.92-1.76 3.35 0a1.72 1.72 0 0 0 2.57 1.07c1.54-.94 3.3.82 2.37 2.37a1.72 1.72 0 0 0 1.06 2.57c1.76.43 1.76 2.92 0 3.35a1.72 1.72 0 0 0-1.07 2.57c.94 1.54-.82 3.3-2.37 2.37a1.72 1.72 0 0 0-2.57 1.06c-.43 1.76-2.92 1.76-3.35 0a1.72 1.72 0 0 0-2.57-1.07c-1.54.94-3.3-.82-2.37-2.37a1.72 1.72 0 0 0-1.06-2.57c-1.76-.43-1.76-2.92 0-3.35a1.72 1.72 0 0 0 1.07-2.57c-.94-1.54.82-3.3 2.37-2.37c1 .61 2.3.07 2.57-1.06M9 12a3 3 0 1 0 6 0a3 3 0 0 0-6 0",
   send: "M10 14L21 3M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z",
   trash: "M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3",
-  plus: "M12 5v14M5 12h14"
+  plus: "M12 5v14M5 12h14",
+  mic: "M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM5 10a7 7 0 0 0 14 0M8 21h8M12 17v4",
+  image: "M15 8h.01M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM3 16l5-5c.93-.9 2.07-.9 3 0l5 5M14 14l1-1c.93-.9 2.07-.9 3 0l3 3",
+  play: "M7 4v16l13-8z",
+  pause: "M6 5h4v14H6zM14 5h4v14h-4z"
 };
 const ic = (n, s = 20, w = 1.8) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${I[n]}"/></svg>`;
 const MI = { face: ['face', 'الوجه'], finger: ['finger', 'البصمة'] };
@@ -228,24 +232,41 @@ function movePill(seg) { const p = seg && seg.querySelector('.pill'), b = seg &&
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } }
 
 /* ========== toasts + system notifications ========== */
-function toast(kind, title, body, who) {
-  const box = $('toasts'); const el = document.createElement('div'); el.className = 'toast';
+const TAB_OF = { chat: 'vChat', live: 'vMap' };
+function toast(kind, title, body, who, go) {
+  const box = $('toasts'); const el = document.createElement('div'); el.className = 'toast' + (kind === 'chat' ? ' chatmsg' : '');
   const icn = { ok: 'check', bad: 'alert', warn: 'bell', info: 'coffee', gold: 'bell', live: 'live', chat: 'chat' }[kind] || 'bell';
   const cls = { live: 'info', chat: 'gold' }[kind] || kind;
-  el.innerHTML = `<div class="ico i-${cls}">${ic(icn, 18)}</div><div class="tx"><small>الشمراني · ${esc(who || 'الآن')}</small><b>${esc(title)}</b>${body ? esc(body) : ''}</div>`;
-  box.prepend(el); vibrate(kind === 'bad' ? [60, 40, 60] : 40);
+  if (kind === 'chat') {
+    el.innerHTML = `<div class="av">${esc(initials(title.split(' · ')[0]))}</div><div class="tx"><small>${ic('chat', 12)} رسالة جديدة · الشات الداخلي</small><b>${esc(title)}</b><span class="bubble">${esc(body)}</span></div>`;
+  } else el.innerHTML = `<div class="ico i-${cls}">${ic(icn, 18)}</div><div class="tx"><small>الشمراني · ${esc(who || 'الآن')}</small><b>${esc(title)}</b>${body ? esc(body) : ''}</div>`;
+  const target = go || TAB_OF[kind];
+  if (target) { el.classList.add('tap'); el.onclick = () => { el.remove(); goTo(target); }; }
+  box.prepend(el); vibrate(kind === 'bad' ? [60, 40, 60] : kind === 'chat' ? [30, 40, 30] : 40);
   while (box.children.length > 3) box.lastChild.remove();
-  setTimeout(() => { el.classList.add('leave'); setTimeout(() => el.remove(), 400); }, 5600);
+  setTimeout(() => { el.classList.add('leave'); setTimeout(() => el.remove(), 400); }, kind === 'chat' ? 7000 : 5600);
 }
-async function sysNotify(title, body, tag) {
+async function sysNotify(title, body, tag, go) {
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const reg = await navigator.serviceWorker.getRegistration();
-    const opt = { body, icon: 'logo-192.png', badge: 'badge-96.png', lang: 'ar', dir: 'rtl', tag: tag || (title + body), renotify: !!tag, vibrate: [80, 40, 80] };
+    const opt = { body, icon: 'logo-192.png', badge: 'badge-96.png', lang: 'ar', dir: 'rtl', tag: tag || (title + body), renotify: !!tag, vibrate: [80, 40, 80], data: { go: go || '' } };
     if (reg) reg.showNotification(title, opt); else new Notification(title, opt);
   } catch (e) { }
 }
-function alertBoth(kind, title, body, who, tag) { toast(kind, title, body, who); sysNotify(title, body, tag); }
+function alertBoth(kind, title, body, who, tag, go) { toast(kind, title, body, who, go); sysNotify(title, body, tag, go || TAB_OF[kind]); }
+// فتح صفحة معيّنة من إشعار (داخل التطبيق أو من إشعار الجوال)
+function goTo(target) {
+  if (!target || !me) return;
+  const [tab, id] = String(target).split(':');
+  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vSet'] : ['vEmp', 'vLive', 'vChat'];
+  if (!ok.includes(tab)) return;
+  if (view !== tab) openTab(tab);
+  if (tab === 'vMap' && id && isOwner) setTimeout(() => openLiveSheet(id), 400);
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.go) goTo(e.data.go); });
+let pendingGo = (location.hash || '').replace('#go=', '').replace('#', '') || null;
+function setBadge() { try { const n = unread(); if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch (e) { } }
 function askNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(() => refresh()); } catch (e) { } }
 
 /* ========== clock ========== */
@@ -257,6 +278,8 @@ const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vCha
 const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات']];
 const TABS_OWN = [['vOwn', 'home', 'الرئيسية'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات'], ['vSet', 'gear', 'الإعدادات']];
 function show(id) {
+  if (id !== 'vChat' && typeof rec !== 'undefined' && rec) stopRec(false);
+  if (id !== 'vChat' && typeof curAudio !== 'undefined' && curAudio) { curAudio.pause(); }
   VIEWS.forEach(v => { $(v).hidden = v !== id; });
   view = id;
   $('chrome').hidden = id === 'vLogin';
@@ -713,7 +736,7 @@ function renderLive() {
     <p class="muted small" style="margin:0 0 12px">لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.</p>
     <div class="map" id="myMap"></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
-    <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ مشاركة موقعي المباشر'}</button>
+    <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ لايف لوكيشن'}</button>
     <div class="err" id="lvErr" style="text-align:center"></div>
     <ul class="tips">
       <li>خلّي التطبيق مفتوح والشاشة شغالة أثناء المشاركة. الجوال بيوقف الموقع لو التطبيق اتقفل أو الشاشة طفت.</li>
@@ -780,6 +803,7 @@ function onFixErr(e) { const er = $('lvErr'); if (er && e && e.code === 1) er.te
 async function keepAwake() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { } }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
+    if (view === 'vChat') markChatRead();
     if (liveOn) { keepAwake(); if (watchId == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
     checkEmpReminders(); checkOwnerAlerts();
   }
@@ -815,18 +839,18 @@ function onLive(snap) {
     snap.docChanges().forEach(c => {
       if (c.type === 'removed') return;
       const now = lives[c.doc.id], was = prev[c.doc.id], name = now.name || 'موظف';
-      if (now.on && !(was && was.on)) { alertBoth('live', name + ' بدأ مشاركة موقعه', 'اضغط لعرضه على الخريطة', 'الموقع المباشر', 'live-' + c.doc.id); return; }
-      if (!now.on && was && was.on) { alertBoth('info', name + ' أوقف مشاركة موقعه', now.lat ? 'آخر مكان: ' + placeName(now) : '', 'الموقع المباشر', 'live-' + c.doc.id); return; }
+      if (now.on && !(was && was.on)) { alertBoth('live', name + ' بدأ مشاركة موقعه', 'اضغط لعرضه على الخريطة', 'الموقع المباشر', 'live-' + c.doc.id, 'vMap:' + c.doc.id); return; }
+      if (!now.on && was && was.on) { alertBoth('info', name + ' أوقف مشاركة موقعه', now.lat ? 'آخر مكان: ' + placeName(now) : '', 'الموقع المباشر', 'live-' + c.doc.id, 'vMap:' + c.doc.id); return; }
       if (now.on && now.lat != null && (!was || was.lat !== now.lat || was.lng !== now.lng)) {
         const wasSite = was && was.lat != null ? siteAt(was) : null, nowSite = siteAt(now);
         if (was && was.lat != null && ((wasSite && wasSite.s.id) !== (nowSite && nowSite.s.id))) {
-          alertBoth('live', nowSite ? name + ' وصل ' + nowSite.s.name : name + ' خرج من ' + wasSite.s.name, tm(nowMin()), 'الموقع المباشر', 'live-' + c.doc.id);
+          alertBoth('live', nowSite ? name + ' وصل ' + nowSite.s.name : name + ' خرج من ' + wasSite.s.name, tm(nowMin()), 'الموقع المباشر', 'live-' + c.doc.id, 'vMap:' + c.doc.id);
           liveNotifAt[c.doc.id] = Date.now(); return;
         }
         if (liveEvery() && Date.now() - (liveNotifAt[c.doc.id] || 0) >= 60000) {
           liveNotifAt[c.doc.id] = Date.now();
           const mv = was && was.lat != null ? ' · تحرك ' + ar(Math.round(distM(was, now))) + ' م' : '';
-          alertBoth('live', name + ' · تحديث الموقع', placeName(now) + mv, 'الموقع المباشر', 'live-' + c.doc.id);
+          alertBoth('live', name + ' · تحديث الموقع', placeName(now) + mv, 'الموقع المباشر', 'live-' + c.doc.id, 'vMap:' + c.doc.id);
         }
       }
     });
@@ -835,6 +859,55 @@ function onLive(snap) {
   if (view === 'vMap') paintMap();
 }
 const placeName = l => { const s = siteAt(l); return s ? 'في ' + s.s.name : 'خارج مواقع العمل'; };
+// بيتحرك ولا واقف: من السرعة أو من آخر نقطتين في المسار
+function motion(l) {
+  if (!fresh(l)) return l.on ? { txt: 'منقطع', cls: 'c-missing', moving: false } : { txt: 'متوقف', cls: 'c-off', moving: false };
+  let moving = l.spd != null && l.spd >= 4, speed = l.spd;
+  const p = Array.isArray(l.path) ? l.path : [];
+  if (!moving && p.length >= 2) {
+    const a = p[p.length - 1], b = p[p.length - 2];
+    if (a.t && b.t && a.t - b.t < 3 * 60000 && Date.now() - a.t < 2 * 60000) { const d = distM(a, b); if (d >= 40) { moving = true; if (speed == null) speed = Math.round(d / ((a.t - b.t) / 1000) * 3.6); } }
+  }
+  return moving ? { txt: 'بيتحرك', cls: 'c-break', moving: true, speed } : { txt: 'واقف', cls: 'c-present', moving: false, speed: 0 };
+}
+const dirUrl = l => `https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}&travelmode=driving`;
+let liveSheetId = null;
+function openLiveSheet(id) {
+  const l = lives[id]; if (!l) return; liveSheetId = id; sheetEmp = null;
+  const sh = $('sheet'), sc = $('scrim');
+  paintLiveSheet();
+  sh.hidden = false; sc.hidden = false;
+  requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  sc.onclick = closeSheet;
+  if (ownMap && l.lat != null) ownMap.setView([l.lat, l.lng], 17, { animate: !RM });
+}
+function paintLiveSheet() {
+  const l = lives[liveSheetId], inner = $('sheetInner'); if (!l || !inner) return;
+  if (l.lat == null) { inner.innerHTML = `<div class="sh-head"><div class="av">${esc(initials(l.name))}</div><b>${esc(l.name)}</b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div><p class="muted" style="text-align:center;padding:20px">بدأ المشاركة، ومكانه هيظهر خلال ثواني…</p>`; $('shClose').onclick = closeSheet; return; }
+  const e = empById(l.id), st = motion(l), s = siteAt(l);
+  const near = sites().map(x => ({ x, d: distM(l, x) })).sort((a, b) => a.d - b.d)[0];
+  const started = l.startedAt && l.startedAt.toMillis ? l.startedAt.toMillis() : null;
+  const pth = Array.isArray(l.path) ? l.path : []; let km = 0; for (let i = 1; i < pth.length; i++) km += distM(pth[i - 1], pth[i]);
+  inner.innerHTML = `<div class="sh-head"><div class="av ${fresh(l) ? 'liveav' : ''}">${esc(initials(l.name))}</div><b>${esc(l.name)} <span class="muted small">${esc((e && e.dept) || l.dept || '')}</span></b>
+    <button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    <div class="lvstate ${st.moving ? 'mv' : ''}"><span class="pulse"></span><b>${st.txt}</b>${st.moving && st.speed ? `<span>· ${ar(st.speed)} كم/س</span>` : ''}<small>${fresh(l) ? 'لايف الآن' : 'آخر تحديث ' + ago(l.atMs)}</small></div>
+    <div class="lvgrid">
+     <div><span>المكان</span><b>${s ? esc(s.s.name) : 'خارج مواقع العمل'}</b></div>
+     <div><span>أقرب موقع عمل</span><b>${near ? esc(near.x.name) + ' · ' + (near.d >= 1000 ? ar(+(near.d / 1000).toFixed(1)) + ' كم' : ar(Math.round(near.d)) + ' م') : '—'}</b></div>
+     <div><span>آخر تحديث</span><b>${ago(l.atMs)} · ${clockFmt.format(new Date(l.atMs))}</b></div>
+     <div><span>دقة الموقع</span><b>±${ar(l.acc || 0)} م</b></div>
+     <div><span>بدأ المشاركة</span><b>${started ? clockFmt.format(new Date(started)) : '—'}</b></div>
+     <div><span>المسافة المقطوعة</span><b>${km >= 1000 ? ar(+(km / 1000).toFixed(1)) + ' كم' : ar(Math.round(km)) + ' م'}</b></div>
+     <div class="wide"><span>الإحداثيات</span><b dir="ltr">${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}</b></div>
+    </div>
+    <div class="lvbtns">
+     <a class="btn primary" href="${dirUrl(l)}" target="_blank" rel="noopener">${ic('send', 18)} الاتجاهات للوصول إليه</a>
+     <a class="btn ghost" href="https://maps.google.com/?q=${l.lat},${l.lng}" target="_blank" rel="noopener">${ic('pin', 18)} فتح في خرائط جوجل</a>
+     <button class="btn ghost" id="lvFocus" type="button">${ic('map', 18)} عرضه على الخريطة</button>
+    </div>`;
+  $('shClose').onclick = closeSheet;
+  $('lvFocus').onclick = () => { closeSheet(); if (ownMap) { ownMap.setView([l.lat, l.lng], 18, { animate: !RM }); ownMarks[l.id] && ownMarks[l.id].openPopup && ownMarks[l.id].openPopup(); } };
+}
 const liveEvery = () => { try { return localStorage.getItem('sh-live-every') !== '0'; } catch (e) { return true; } };
 function renderMap() {
   show('vMap');
@@ -843,10 +916,11 @@ function renderMap() {
     <h2>الخريطة المباشرة <span class="muted small" id="mpCount" style="font-family:var(--f-body)"></span></h2>
     <div class="map tall" id="ownMap"></div>
     <label class="switch"><input type="checkbox" id="mpEvery" ${liveEvery() ? 'checked' : ''}><span>إشعار مع كل تحديث في اللايف (مرة كل دقيقة بحد أقصى لكل موظف)</span></label>
-    <div id="mpList" class="mplist"></div>
+    <div class="lvhead"><b>اللي شغّالين لايف لوكيشن</b><span class="muted small">اضغط على أي اسم لتفاصيل مكانه والاتجاهات</span></div>
+    <div id="mpList" class="lvtable"></div>
   </section>`;
   $('mpEvery').onchange = e => { try { localStorage.setItem('sh-live-every', e.target.checked ? '1' : '0'); } catch (x) { } askNotify(); };
-  $('mpList').onclick = e => { const b = e.target.closest('[data-focus]'); if (!b) return; const l = lives[b.dataset.focus]; if (ownMap && l && l.lat != null) ownMap.setView([l.lat, l.lng], 17, { animate: !RM }); };
+  $('mpList').onclick = e => { const b = e.target.closest('[data-focus]'); if (!b) return; openLiveSheet(b.dataset.focus); };
   ownMarks = {}; ownLines = {}; ownMap = null;
   loadLeaflet().then(L => {
     if (view !== 'vMap') return;
@@ -862,50 +936,67 @@ function paintMap(fit) {
   const arr = Object.values(lives).filter(l => l.lat != null).sort((a, b) => (fresh(b) - fresh(a)) || (b.atMs - a.atMs));
   const onCount = arr.filter(fresh).length;
   $('mpCount').textContent = ar(onCount) + ' يشارك الآن';
-  $('mpList').innerHTML = arr.length ? arr.map(l => {
-    const e = empById(l.id); const on = fresh(l);
-    return `<button class="emp" data-focus="${l.id}"><div class="av ${on ? 'liveav' : ''}">${esc(initials(l.name))}</div><div class="info"><b>${esc(l.name)} ${e && e.dept ? `<span class="muted small">· ${esc(e.dept)}</span>` : ''}</b><span>${placeName(l)} · ${ago(l.atMs)}${l.spd ? ' · ' + ar(l.spd) + ' كم/س' : ''}</span></div><span class="chip ${on ? 'c-present' : 'c-off'}">${on ? 'مباشر' : l.on ? 'منقطع' : 'متوقف'}</span></button>`;
-  }).join('') : `<div class="empty">${ic('live', 28, 1.4)}<b>لا يوجد موظف يشارك موقعه</b><span>لما الموظف يفتح «موقعي المباشر» ويشغّل المشاركة، هيظهر هنا وعلى الخريطة.</span></div>`;
+  $('mpList').innerHTML = arr.length ? `<div class="lvrow lvth"><span>الموظف</span><span>الحالة</span><span>المكان</span><span>آخر تحديث</span></div>` + arr.map(l => {
+    const e = empById(l.id), st = motion(l);
+    return `<button class="lvrow" data-focus="${l.id}"><span class="who"><i class="av ${fresh(l) ? 'liveav' : ''}">${esc(initials(l.name))}</i><span><b>${esc(l.name)}</b><small>${esc((e && e.dept) || l.dept || '')}</small></span></span><span><em class="chip ${st.cls}">${st.txt}</em></span><span class="pl">${placeName(l)}</span><span class="muted">${ago(l.atMs)}</span></button>`;
+  }).join('') : `<div class="empty">${ic('live', 28, 1.4)}<b>لا يوجد موظف يشارك موقعه</b><span>لما الموظف يفتح «موقعي المباشر» ويدوس «ابدأ مشاركة موقعي»، هيظهر هنا وعلى الخريطة.</span></div>`;
+  if (liveSheetId && !$('sheet').hidden) paintLiveSheet();
   if (!ownMap || !window.L) return;
   const L = window.L, pts = [];
   arr.forEach(l => {
     const on = fresh(l), ll = [l.lat, l.lng]; pts.push(ll);
-    if (!ownMarks[l.id]) ownMarks[l.id] = L.marker(ll, { icon: pinIcon(initials(l.name), on) }).addTo(ownMap).bindPopup('');
+    if (!ownMarks[l.id]) { ownMarks[l.id] = L.marker(ll, { icon: pinIcon(initials(l.name), on) }).addTo(ownMap).bindPopup(''); if (ownMarks[l.id].on) ownMarks[l.id].on('click', () => markerClick(l.id)); }
     else { ownMarks[l.id].setLatLng(ll); ownMarks[l.id].setIcon(pinIcon(initials(l.name), on)); }
-    ownMarks[l.id].setPopupContent(`<b>${esc(l.name)}</b><br>${placeName(l)}<br>${ago(l.atMs)} · ±${ar(l.acc || 0)} م<br><a target="_blank" rel="noopener" href="https://maps.google.com/?q=${l.lat},${l.lng}">فتح في خرائط جوجل</a>`);
+    ownMarks[l.id].setPopupContent(`<b>${esc(l.name)}</b><br>${motion(l).txt} · ${placeName(l)}<br>${ago(l.atMs)}<br><a target="_blank" rel="noopener" href="${dirUrl(l)}">الاتجاهات للوصول إليه</a>`);
     const path = Array.isArray(l.path) ? l.path.map(p => [p.lat, p.lng]) : [];
     if (!ownLines[l.id]) ownLines[l.id] = L.polyline(path, { color: on ? '#e3262b' : '#8a8d91', weight: 4, opacity: .55 }).addTo(ownMap);
     else { ownLines[l.id].setLatLngs(path); ownLines[l.id].setStyle({ color: on ? '#e3262b' : '#8a8d91' }); }
   });
   if (fit && pts.length) ownMap.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
 }
+function markerClick(id) { openLiveSheet(id); }
 
 /* ========== chat ========== */
 let chatFirst = true;
 const lastRead = () => { try { return +(localStorage.getItem('sh-chat-read-' + (me && me.uid)) || 0); } catch (e) { return 0; } };
 const unread = () => { const lr = lastRead(); return msgs.filter(m => m.atMs > lr && m.uid !== (me && me.uid)).length; };
-function markChatRead() { try { const t = msgs.length ? Math.max(...msgs.map(m => m.atMs)) : Date.now(); localStorage.setItem('sh-chat-read-' + me.uid, String(Math.max(t, lastRead()))); } catch (e) { } }
+function markChatRead() { try { const t = msgs.length ? Math.max(...msgs.map(m => m.atMs)) : Date.now(); localStorage.setItem('sh-chat-read-' + me.uid, String(Math.max(t, lastRead()))); } catch (e) { } setBadge(); }
 function onChat(snap) {
   const added = [];
   snap.docChanges().forEach(c => { if (c.type === 'added' && !c.doc.metadata.hasPendingWrites) added.push(c.doc); });
   msgs = snap.docs.map(d => { const x = d.data(); return { id: d.id, ...x, atMs: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() }; }).sort((a, b) => a.atMs - b.atMs);
   if (!chatFirst) {
-    added.forEach(d => { const m = d.data(); if (m.uid === me.uid) return; if (view !== 'vChat' || document.hidden) alertBoth('chat', m.name + (m.dept ? ' · ' + m.dept : ''), String(m.text).slice(0, 120), 'الشات الداخلي', 'chat'); });
+    added.forEach(d => {
+      const m = d.data(); if (m.uid === me.uid) return;
+      const who = m.name + (m.dept ? ' · ' + m.dept : ''), txt = (m.kind === 'img' ? '📷 صورة' + (m.text ? ' · ' : '') : m.kind === 'voice' ? '🎤 رسالة صوتية ' + fmtDur(m.dur || 0) : '') + String(m.text || '').slice(0, 140);
+      if (view !== 'vChat') toast('chat', who, txt, 'الشات الداخلي');
+      if (view !== 'vChat' || document.hidden) sysNotify('💬 ' + who, txt, 'chat', 'vChat');
+      else vibrate(20);
+    });
   }
   chatFirst = false;
   if (view === 'vChat') { paintChat(); if (!document.hidden) markChatRead(); }
   if (!$('tabbar').hidden) paintTabs();
+  setBadge();
 }
 function renderChat() {
   show('vChat');
   const v = $('vChat');
   v.innerHTML = `<section class="card chatcard reveal">
     <h2>الشات الداخلي <span class="muted small" style="font-family:var(--f-body)">لكل موظفي الشركة</span></h2>
+    ${chatNotifCta()}
     <div class="msgs" id="msgs"></div>
-    <form class="composer" id="chatForm"><textarea id="chatIn" rows="1" maxlength="1000" placeholder="اكتب رسالة…" aria-label="رسالة"></textarea><button class="btn primary" id="chatSend" type="submit" aria-label="إرسال">${ic('send', 18)}</button></form>
+    <form class="composer" id="chatForm">
+     <button class="cbtn" id="chatImg" type="button" aria-label="إرفاق صورة">${ic('image', 21)}</button>
+     <textarea id="chatIn" rows="1" maxlength="1000" placeholder="اكتب رسالة…" aria-label="رسالة"></textarea>
+     <button class="btn primary" id="chatSend" type="submit" aria-label="إرسال" hidden>${ic('send', 18)}</button>
+     <button class="btn primary" id="chatMic" type="button" aria-label="تسجيل رسالة صوتية">${ic('mic', 20)}</button>
+     <div class="recbar" id="recBar" hidden><button type="button" class="cbtn" id="recCancel" aria-label="إلغاء التسجيل">${ic('trash', 19)}</button><span class="recdot"></span><b class="num" id="recT">0:00</b><span class="muted small">جارٍ التسجيل…</span><button type="button" class="btn primary" id="recSend" aria-label="إرسال الرسالة الصوتية">${ic('send', 18)}</button></div>
+    </form>
+    <input type="file" id="chatFile" accept="image/*" hidden>
   </section>`;
   const ta = $('chatIn');
-  ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
+  ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; const has = !!ta.value.trim(); $('chatSend').hidden = !has; $('chatMic').hidden = has; };
   ta.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !/Android|iPhone|iPad/i.test(navigator.userAgent)) { e.preventDefault(); $('chatForm').requestSubmit(); } };
   $('chatForm').onsubmit = async e => {
     e.preventDefault(); const text = ta.value.trim(); if (!text) return;
@@ -913,8 +1004,34 @@ function renderChat() {
     try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : meEmp.name, dept: isOwner ? '' : (meEmp.dept || ''), owner: isOwner, text, at: serverTimestamp() }); }
     catch (err) { toast('bad', 'لم تُرسل الرسالة', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); ta.value = text; }
   };
-  $('msgs').onclick = async e => { const b = e.target.closest('[data-del]'); if (!b || !isOwner) return; try { await deleteDoc(doc(db, 'chat', b.dataset.del)); } catch (x) { toast('bad', 'تعذّر الحذف', '', 'الشات'); } };
+  $('msgs').onclick = async e => {
+    const pl = e.target.closest('[data-voice]'); if (pl) { playVoice(pl); return; }
+    const im = e.target.closest('[data-media] img'); if (im && im.dataset.full) { openViewer(im.src); return; }
+    const b = e.target.closest('[data-del]'); if (!b || !isOwner) return;
+    const m = msgs.find(x => x.id === b.dataset.del);
+    try { await deleteDoc(doc(db, 'chat', b.dataset.del)); if (m && m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); } catch (x) { toast('bad', 'تعذّر الحذف', '', 'الشات'); }
+  };
+  // صورة
+  $('chatImg').onclick = () => { $('chatFile').value = ''; $('chatFile').click(); };
+  $('chatFile').onchange = async () => {
+    const f = $('chatFile').files && $('chatFile').files[0]; if (!f) return;
+    const cap = ta.value.trim(); ta.value = ''; ta.oninput();
+    toast('info', 'جارٍ إرسال الصورة…', '', 'الشات');
+    try { const im = await packImage(f); await sendMedia('img', im.data, { w: im.w, h: im.h, thumb: im.thumb, text: cap }); }
+    catch (x) { toast('bad', 'لم تُرسل الصورة', x && x.message === 'big' ? 'الصورة كبيرة جداً' : 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); }
+  };
+  // رسالة صوتية
+  $('chatMic').onclick = startRec;
+  $('recCancel').onclick = () => stopRec(false);
+  $('recSend').onclick = () => stopRec(true);
+  const cb = $('chatNotif'); if (cb) cb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } renderChat(); };
   paintChat(true); markChatRead(); paintTabs();
+}
+function chatNotifCta() {
+  const p = ('Notification' in window) ? Notification.permission : 'unsupported';
+  if (p === 'default') return `<button class="btn ghost" id="chatNotif" style="margin-bottom:10px">${ic('bell', 16)} فعّل الإشعارات عشان توصلك الرسايل على الجوال</button>`;
+  if (p === 'denied') return `<p class="muted small" style="margin:0 0 8px">إشعارات الجوال مقفولة، فعّلها من إعدادات المتصفح عشان توصلك الرسايل</p>`;
+  return '';
 }
 function paintChat(jump) {
   const box = $('msgs'); if (!box) return;
@@ -923,11 +1040,99 @@ function paintChat(jump) {
   msgs.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}">${mine ? '' : `<div class="who">${esc(m.name)}${m.dept ? ' · ' + esc(m.dept) : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>`}<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div><div class="at">${clockFmt.format(new Date(m.atMs))}${isOwner ? ` <button data-del="${m.id}" aria-label="حذف الرسالة">${ic('trash', 12)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}">${mine ? '' : `<div class="who">${esc(m.name)}${m.dept ? ' · ' + esc(m.dept) : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>`}${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${clockFmt.format(new Date(m.atMs))}${isOwner ? ` <button data-del="${m.id}" aria-label="حذف الرسالة">${ic('trash', 12)}</button>` : ''}</div></div>`;
   });
-  box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك.</span></div>`;
+  box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
+  hydrateImages(box);
 }
+
+/* ----- الصور والرسايل الصوتية: محفوظة في media/{id} وتتحمّل عند العرض بس ----- */
+const fmtDur = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + pad(s % 60); };
+const mediaCache = {};
+async function loadMedia(id) {
+  if (mediaCache[id]) return mediaCache[id];
+  const p = getDoc(doc(db, 'media', id)).then(s => s.exists() ? s.data().data : null);
+  mediaCache[id] = p; const v = await p; if (!v) delete mediaCache[id]; return v;
+}
+function mediaHTML(m) {
+  if (m.kind === 'img') return `<div class="mimg" data-media="${esc(m.media)}" style="aspect-ratio:${m.w || 4}/${m.h || 3}"><img alt="صورة" src="${m.thumb || ''}"></div>`;
+  if (m.kind === 'voice') return `<button type="button" class="mvoice" data-voice="${esc(m.media)}" data-dur="${m.dur || 0}" aria-label="تشغيل الرسالة الصوتية"><span class="pp">${ic('play', 16)}</span><span class="wave"><i style="width:0%"></i></span><span class="num dur">${fmtDur(m.dur || 0)}</span></button>`;
+  return '';
+}
+function hydrateImages(box) {
+  box.querySelectorAll('[data-media]').forEach(el => {
+    const img = el.querySelector('img'); if (!img || img.dataset.full) return;
+    loadMedia(el.dataset.media).then(src => { if (src) { img.src = src; img.dataset.full = '1'; el.classList.add('ok'); } else el.classList.add('gone'); }).catch(() => { });
+  });
+}
+let curAudio = null, curBtn = null;
+async function playVoice(btn) {
+  if (curBtn === btn && curAudio) { if (curAudio.paused) curAudio.play(); else curAudio.pause(); return; }
+  if (curAudio) { curAudio.pause(); curBtn && curBtn.classList.remove('playing'); }
+  curBtn = btn; btn.classList.add('loading');
+  const src = await loadMedia(btn.dataset.voice).catch(() => null); btn.classList.remove('loading');
+  if (!src) { toast('bad', 'تعذّر تشغيل الرسالة', 'ربما اتحذفت أو الإنترنت ضعيف', 'الشات'); return; }
+  const a = new Audio(src); curAudio = a;
+  const bar = btn.querySelector('.wave i'), d = btn.querySelector('.dur'), pp = btn.querySelector('.pp'), total = +btn.dataset.dur || 0;
+  a.ontimeupdate = () => { const T = isFinite(a.duration) && a.duration > 0 ? a.duration : total || 1; bar.style.width = Math.min(100, a.currentTime / T * 100) + '%'; d.textContent = fmtDur(a.currentTime); };
+  a.onplay = () => { btn.classList.add('playing'); pp.innerHTML = ic('pause', 16); };
+  a.onpause = () => { btn.classList.remove('playing'); pp.innerHTML = ic('play', 16); };
+  a.onended = () => { bar.style.width = '0%'; d.textContent = fmtDur(total); curAudio = null; curBtn = null; };
+  a.play().catch(() => toast('bad', 'تعذّر تشغيل الصوت', '', 'الشات'));
+}
+function openViewer(src) {
+  const v = document.createElement('div'); v.className = 'viewer';
+  v.innerHTML = `<img src="${src}" alt="صورة"><button class="iconbtn" aria-label="إغلاق">${ic('x', 20)}</button>`;
+  v.onclick = () => { v.classList.remove('on'); setTimeout(() => v.remove(), 300); };
+  document.body.appendChild(v); requestAnimationFrame(() => v.classList.add('on'));
+}
+const readURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+async function packImage(file) {
+  const url = URL.createObjectURL(file); const img = new Image(); img.src = url; await img.decode();
+  const draw = (max, q) => { const k = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return { data: c.toDataURL('image/jpeg', q), w: c.width, h: c.height }; };
+  let out = null;
+  for (const [mx, q] of [[1600, .8], [1400, .72], [1200, .65], [1000, .6], [800, .55]]) { out = draw(mx, q); if (out.data.length < 700000) break; }
+  const thumb = draw(48, .5).data; URL.revokeObjectURL(url);
+  if (out.data.length > 900000) throw new Error('big');
+  return { ...out, thumb };
+}
+async function sendMedia(kind, data, extra) {
+  const ref = await addDoc(collection(db, 'media'), { uid: me.uid, kind, data, at: serverTimestamp() });
+  mediaCache[ref.id] = Promise.resolve(data);
+  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : meEmp.name, dept: isOwner ? '' : (meEmp.dept || ''), owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, at: serverTimestamp() });
+}
+const REC_MAX = 120;
+let rec = null;
+async function startRec() {
+  if (rec) return;
+  if (!navigator.mediaDevices || !window.MediaRecorder) { toast('bad', 'التسجيل غير مدعوم على هذا الجهاز', '', 'الشات'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { toast('bad', 'اسمح للتطبيق باستخدام المايك', 'من إعدادات المتصفح أو الجوال', 'الشات'); return; }
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+  const mr = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 });
+  rec = { mr, stream, chunks: [], t0: Date.now(), send: false, timer: null };
+  mr.ondataavailable = e => { if (e.data && e.data.size) rec.chunks.push(e.data); };
+  mr.onstop = async () => {
+    const r = rec; rec = null; clearInterval(r.timer); r.stream.getTracks().forEach(t => t.stop());
+    $('recBar') && ($('recBar').hidden = true); const ta = $('chatIn'); if (ta) { ta.hidden = false; ta.oninput(); } if ($('chatImg')) $('chatImg').hidden = false;
+    const dur = (Date.now() - r.t0) / 1000;
+    if (!r.send) return;
+    if (dur < 1) { toast('warn', 'الرسالة قصيرة جداً', 'اضغط على المايك وكلّم، وبعدين دوس إرسال', 'الشات'); return; }
+    try {
+      const blob = new Blob(r.chunks, { type: r.mr.mimeType || type || 'audio/webm' });
+      const data = await readURL(blob);
+      if (data.length > 950000) { toast('bad', 'الرسالة الصوتية طويلة جداً', 'الحد الأقصى دقيقتين', 'الشات'); return; }
+      await sendMedia('voice', data, { dur: Math.round(dur) });
+    } catch (e) { toast('bad', 'لم تُرسل الرسالة الصوتية', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); }
+  };
+  mr.start(1000); vibrate(30);
+  $('chatIn').hidden = true; $('chatMic').hidden = true; $('chatSend').hidden = true; $('chatImg').hidden = true; $('recBar').hidden = false;
+  const tick = () => { const s = (Date.now() - rec.t0) / 1000; const el = $('recT'); if (el) el.textContent = fmtDur(s); if (s >= REC_MAX) stopRec(true); };
+  tick(); rec.timer = setInterval(() => rec && tick(), 250);
+}
+function stopRec(send) { if (!rec) return; rec.send = send; vibrate(send ? 30 : [20, 30, 20]); try { rec.mr.stop(); } catch (e) { } }
 
 /* ========== owner ========== */
 function ownerEvents() {
@@ -1049,7 +1254,7 @@ function checkOwnerAlerts() {
 /* ----- owner: employee sheet ----- */
 let sheetEmp = null;
 function openSheet(id) {
-  const emp = empById(id); if (!emp) return; sheetEmp = id;
+  const emp = empById(id); if (!emp) return; sheetEmp = id; liveSheetId = null;
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner');
   const r = getRec(emp, todayKey()); const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
   const g = emp.geo || { mode: 'sites' }, ids = Array.isArray(g.ids) ? g.ids : sites().map(s => s.id);
@@ -1091,7 +1296,7 @@ function openSheet(id) {
   const dv = $('shDev'); if (dv) dv.onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { cred: null }); toast('ok', 'تم إلغاء ربط جهاز ' + emp.name, 'أول بصمة قادمة ستربط جهازه الجديد', 'الإدارة'); closeSheet(); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
 }
 function closeSheet() {
-  const sh = $('sheet'), sc = $('scrim'); sheetEmp = null;
+  const sh = $('sheet'), sc = $('scrim'); sheetEmp = null; liveSheetId = null;
   sh.classList.remove('on'); sc.classList.remove('on'); setTimeout(() => { sh.hidden = true; sc.hidden = true; }, 450);
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('sheet').hidden) closeSheet(); });
@@ -1259,7 +1464,7 @@ onAuthStateChanged(auth, u => {
     renderMsg('جارٍ تحميل البيانات…', '');
     let gotEmps = false;
     unsubs.push(onSnapshot(collection(db, 'employees'), s => {
-      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome('المالك'); } } else refresh();
+      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome('المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
     }, err => renderMsg('تعذّر تحميل الموظفين', 'تأكد من لصق قواعد الحماية في Firebase وأن رقم المالك صحيح.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', yearStart)), onDays, () => { }));
     unsubs.push(onSnapshot(collection(db, 'live'), onLive, () => { }));
@@ -1272,7 +1477,7 @@ onAuthStateChanged(auth, u => {
       $('userChip').textContent = meEmp.name;
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
-      if (first || !['vEmp', 'vLive', 'vChat'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); }
+      if (first || !['vEmp', 'vLive', 'vChat'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
       else if (view === 'vEmp') updateEmpLive(true);
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('uid', '==', u.uid)), onDays, () => { }));
@@ -1306,5 +1511,6 @@ if ('serviceWorker' in navigator) addEventListener('load', () => navigator.servi
 setDates(); tickClock();
 setInterval(() => { tickClock(); if (view === 'vEmp') updateEmpLive(false); }, 1000);
 setInterval(() => { checkEmpReminders(); checkOwnerAlerts(); }, 15000);
-setInterval(() => { setDates(); updateBands(); if (view === 'vEmp' && !busy) updateEmpLive(true); if (view === 'vOwn') renderFeed(false); if (view === 'vMap') paintMap(); if (view === 'vLive') paintLiveStats(); }, 20000);
+setInterval(() => { setDates(); updateBands(); if (view === 'vEmp' && !busy) updateEmpLive(true); if (view === 'vOwn') renderFeed(false); if (view === 'vLive') paintLiveStats(); }, 20000);
+setInterval(() => { if (view === 'vMap') paintMap(); }, 10000);
 setTimeout(() => { const s = $('splash'); if (s) { s.classList.add('out'); setTimeout(() => s.remove(), 700); } checkEmpReminders(); checkOwnerAlerts(); }, RM ? 300 : 3000);

@@ -1,4 +1,4 @@
-const CACHE = 'shamrani-basma-v1';
+const CACHE = 'shamrani-basma-v3';
 const SHELL = [
   './',
   './index.html',
@@ -45,11 +45,12 @@ self.addEventListener('fetch', e => {
   }
 });
 
-// Tapping a notification opens the app
+// Tapping a notification opens the app on the right page (chat, map…)
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const go = (e.notification.data && e.notification.data.go) || '';
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) { if ('focus' in c) return c.focus(); }
-    return self.clients.openWindow('./');
+    for (const c of list) { if ('focus' in c) { c.postMessage({ go }); return c.focus(); } }
+    return self.clients.openWindow('./' + (go ? '#go=' + go : ''));
   }));
 });

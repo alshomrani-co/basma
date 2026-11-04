@@ -61,15 +61,28 @@ service cloud.firestore {
     }
 
     // الشات الداخلي: كل الموظفين والمالك، والمالك بس اللي يحذف
+    // الرسالة نص، أو صورة أو رسالة صوتية مع نص اختياري
     match /chat/{id} {
       allow read: if isOwner() || isActiveEmp();
       allow create: if (isOwner() || isActiveEmp())
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 1000
         && request.resource.data.at == request.time
-        && request.resource.data.owner == isOwner();
+        && request.resource.data.owner == isOwner()
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && (request.resource.data.text.size() > 0
+            || (request.resource.data.get('kind', '') in ['img', 'voice'] && request.resource.data.media is string));
+      allow delete: if isOwner();
+    }
+
+    // ملفات الصور والرسايل الصوتية للشات
+    match /media/{id} {
+      allow read: if isOwner() || isActiveEmp();
+      allow create: if (isOwner() || isActiveEmp())
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['img', 'voice']
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000;
       allow delete: if isOwner();
     }
   }
