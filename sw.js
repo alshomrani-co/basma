@@ -1,9 +1,9 @@
-const CACHE = 'shamrani-basma-v4';
+const CACHE = 'shamrani-basma-v5';
 const SHELL = [
   './',
   './index.html',
-  './app.js',
-  './config.js',
+  './app.js?v=5',
+  './config.js?v=5',
   './manifest.json',
   './logo-180.png',
   './logo-192.png',
@@ -35,7 +35,8 @@ self.addEventListener('fetch', e => {
 
   // App files: network first so updates arrive at once, cache when offline
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then(res => put(req, res)).catch(() => caches.match(req).then(hit => hit || caches.match('./index.html'))));
+    // no-cache: يتأكد من السيرفر كل مرة، فالتحديث يوصل فوراً من غير ما يستنى كاش المتصفح (١٠ دقائق على GitHub)
+    e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => put(req, res)).catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html'))));
     return;
   }
 

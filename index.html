@@ -5,9 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f5f4f2" id="themeColor">
 <script>var t="light";try{t=localStorage.getItem("sh-theme")||"light";}catch(e){}document.documentElement.setAttribute("data-theme",t);</script>
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=1">
+<link rel="manifest" href="manifest.json?v=5">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -341,16 +342,34 @@ body,.card,.okpi,.authcard,.sheet,.toast,.slot,.kpi{transition:background-color 
 .loader{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin 1s linear infinite}
 
 /* tab bar */
-body.has-tabs{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px))}
-.tb-in{max-width:560px;margin:0 auto;display:flex;gap:4px}
-.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;border-radius:12px;color:var(--muted);font-size:11px;position:relative;transition:color .25s,background .25s}
-.tabbar button[aria-current="page"]{color:var(--gold);background:var(--gold-soft)}
-.tabbar button[aria-current="page"] svg{animation:tabpop .4s cubic-bezier(.3,1.6,.5,1)}
-@keyframes tabpop{40%{transform:scale(1.18)}}
-.badge{position:absolute;top:2px;right:calc(50% - 22px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--gold);color:#fff;font-style:normal;font-size:10px;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
-.livedot{position:absolute;top:6px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:livep 1.6s infinite}
+body.has-tabs{padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:8px max(10px,env(safe-area-inset-left,0px)) calc(10px + env(safe-area-inset-bottom,0px))}
+.tb-in{max-width:560px;margin:0 auto;display:flex;gap:6px;padding:6px;border-radius:22px;background:var(--surface);border:1px solid var(--line);box-shadow:0 -6px 28px rgba(215,38,43,.14),0 10px 30px rgba(0,0,0,.12);position:relative}
+.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 8px;border-radius:16px;color:var(--fg);font-size:12px;font-weight:500;position:relative;transition:color .25s,background .3s,transform .2s}
+.tabbar button svg{width:25px;height:25px;color:var(--gold);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.tabbar button:active{transform:scale(.94)}
+.tabbar button[aria-current="page"]{background:linear-gradient(150deg,#ef3b3f,#c81e23);color:#fff;box-shadow:0 6px 16px rgba(215,38,43,.4)}
+.tabbar button[aria-current="page"] svg{color:#fff;transform:translateY(-1px) scale(1.08)}
+.tabbar button[aria-current="page"]::after{content:"";position:absolute;bottom:-2px;left:50%;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:#fff;opacity:.85}
+.tabbar button[aria-current="page"] svg{animation:tabpop .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes tabpop{40%{transform:scale(1.25)}}
+.badge{position:absolute;top:3px;right:calc(50% - 26px);min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--gold);color:#fff;font-style:normal;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface);animation:badgep 1.8s ease-in-out infinite}
+.tabbar button[aria-current="page"] .badge{background:#fff;color:var(--gold);border-color:#c81e23}
+@keyframes badgep{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.livedot{position:absolute;top:7px;right:calc(50% - 18px);width:10px;height:10px;border-radius:50%;background:var(--ok);border:2px solid var(--surface);box-shadow:0 0 0 0 var(--ok);animation:livep 1.6s infinite}
 @keyframes livep{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+/* لفت الانتباه للزراير أول ما التطبيق يفتح */
+.tabbar.intro .tb-in{animation:tbup .7s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes tbup{from{transform:translateY(120%)}}
+.tabbar.intro .tb-in::before{content:"";position:absolute;inset:-3px;border-radius:24px;border:2px solid var(--gold);animation:tbglow 1.4s ease-out 3}
+@keyframes tbglow{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.06,1.35)}}
+.tabbar.intro button:not([aria-current="page"]) svg{animation:tbhop .6s ease both}
+.tabbar.intro button:nth-child(1) svg{animation-delay:.7s}.tabbar.intro button:nth-child(2) svg{animation-delay:.85s}.tabbar.intro button:nth-child(3) svg{animation-delay:1s}.tabbar.intro button:nth-child(4) svg{animation-delay:1.15s}
+@keyframes tbhop{40%{transform:translateY(-7px) scale(1.15)}}
+.tbtip{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);font-size:13px;padding:8px 14px;border-radius:12px;white-space:nowrap;box-shadow:0 8px 20px rgba(0,0,0,.25);animation:tipin .5s cubic-bezier(.3,1.5,.5,1) .8s both;pointer-events:none}
+.tbtip::after{content:"";position:absolute;top:100%;left:50%;margin-left:-7px;border:7px solid transparent;border-top-color:var(--fg)}
+@keyframes tipin{from{opacity:0;transform:translate(-50%,10px)}}
+.tbtip.out{transition:opacity .4s;opacity:0}
 .hello{display:flex;flex-direction:column;margin-bottom:12px}
 .hello b{font-family:var(--f-display);font-weight:600;font-size:20px}
 .hello span{color:var(--muted);font-size:12px}
@@ -431,6 +450,74 @@ select{background:var(--surface2);border:1px solid var(--line);border-radius:12p
 .site .tx b{display:block;font-weight:500}
 .site .tx small{color:var(--muted);font-size:12px}
 .navb.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+
+/* chat toast (شكل الرسالة) */
+.toast.tap{cursor:pointer}
+.toast.tap:active{transform:scale(.98)}
+.toast.chatmsg{border-color:var(--gold);align-items:center}
+.toast.chatmsg .av{width:40px;height:40px;background:var(--gold);color:#fff;font-size:13px}
+.toast.chatmsg small{display:flex;align-items:center;gap:4px;color:var(--gold)}
+.toast.chatmsg .bubble{display:block;margin-top:4px;background:var(--surface2);border-radius:12px 12px 12px 4px;padding:6px 10px;font-size:13px;line-height:1.5;max-height:4.6em;overflow:hidden}
+/* live table */
+.lvhead{display:flex;flex-direction:column;margin:16px 0 8px}
+.lvhead b{font-family:var(--f-display);font-weight:500;font-size:15px}
+.lvtable{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.lvrow{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,.9fr) minmax(0,1.3fr) minmax(0,.9fr);gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);text-align:right;width:100%;font-size:12px;transition:background .2s}
+.lvrow:first-child{border-top:0}
+button.lvrow:hover{background:var(--surface2)}
+.lvth{background:var(--surface2);font-size:11px;color:var(--muted);padding:8px 12px}
+.lvrow .who{display:flex;align-items:center;gap:8px;min-width:0}
+.lvrow .who .av{width:32px;height:32px;font-size:11px;font-style:normal}
+.lvrow .who b{display:block;font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lvrow .who small{display:block;color:var(--muted);font-size:11px}
+.lvrow em{font-style:normal}
+.lvrow .pl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:520px){.lvrow{grid-template-columns:minmax(0,1.5fr) auto minmax(0,1fr)}.lvrow>span:nth-child(3){display:none}}
+/* live person card */
+.lvstate{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--ok-bg);color:var(--ok);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.lvstate.mv{background:var(--info-bg);color:var(--info)}
+.lvstate b{font-family:var(--f-display);font-weight:600;font-size:18px}
+.lvstate small{margin-inline-start:auto;font-size:12px;opacity:.85}
+.lvstate .pulse{width:10px;height:10px;border-radius:50%;background:currentColor;animation:livep 1.6s infinite;box-shadow:0 0 0 0 currentColor}
+.lvgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.lvgrid div{background:var(--surface2);border-radius:12px;padding:9px 11px}
+.lvgrid .wide{grid-column:1/-1}
+.lvgrid span{display:block;font-size:11px;color:var(--muted)}
+.lvgrid b{font-weight:500;font-size:14px}
+.lvbtns{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.lvbtns .btn{text-decoration:none;padding:13px}
+.lvbtns .btn.primary svg{transform:scaleX(-1)}
+
+/* chat media */
+.composer{position:relative}
+.cbtn{flex:0 0 42px;height:46px;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:12px}
+.cbtn:active{background:var(--surface2)}
+.composer .btn[hidden],.composer textarea[hidden],.cbtn[hidden]{display:none!important}
+.recbar{flex:1;display:flex;align-items:center;gap:10px;background:var(--bad-bg);border-radius:14px;padding:0 4px 0 8px;min-height:46px}
+.recbar[hidden]{display:none}
+.recbar .cbtn{color:var(--bad)}
+.recbar b{font-family:var(--f-display);font-weight:500;font-size:16px;color:var(--bad);direction:ltr}
+.recbar .muted{flex:1}
+.recdot{width:10px;height:10px;border-radius:50%;background:var(--bad);animation:blink 1s infinite}
+.recbar .btn{flex:0 0 42px;height:42px;padding:0;border-radius:50%}
+.recbar .btn svg{transform:scaleX(-1)}
+.mimg{width:min(240px,62vw);border-radius:12px;overflow:hidden;background:var(--surface2);margin:2px 0 4px;cursor:zoom-in}
+.mimg img{width:100%;height:100%;object-fit:cover;display:block;filter:blur(8px);transform:scale(1.08);transition:filter .4s,transform .4s}
+.mimg.ok img{filter:none;transform:none}
+.mimg.gone{display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+.mimg.gone::after{content:"الصورة اتحذفت"}
+.mimg.gone img{display:none}
+.mvoice{display:flex;align-items:center;gap:10px;min-width:min(220px,58vw);padding:4px 0;color:inherit}
+.mvoice .pp{width:36px;height:36px;border-radius:50%;background:var(--gold);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.msg.mine .mvoice .pp{background:#fff;color:var(--gold)}
+.mvoice .wave{flex:1;height:4px;border-radius:2px;background:color-mix(in srgb,currentColor 22%,transparent);position:relative;overflow:hidden}
+.mvoice .wave i{position:absolute;inset:0 0 0 auto;background:currentColor;border-radius:2px;transition:width .2s linear}
+.mvoice .dur{font-size:11px;opacity:.8;direction:ltr}
+.mvoice.loading .pp{animation:blink 1s infinite}
+.viewer{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .3s;padding:20px}
+.viewer.on{opacity:1}
+.viewer img{max-width:100%;max-height:100%;border-radius:8px}
+.viewer .iconbtn{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:14px;background:rgba(255,255,255,.15);border-color:transparent;color:#fff}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -496,6 +583,6 @@ select{background:var(--surface2);border:1px solid var(--line);border-radius:12p
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=5"></script>
 </body>
 </html>
