@@ -288,9 +288,25 @@ function show(id) {
   if (tabbed) paintTabs();
   if (id === 'vChat') { markChatRead(); }
 }
+let introShown = false;
+function tabIntro() {
+  if (introShown) return; introShown = true;
+  let n = 0; try { n = +(localStorage.getItem('sh-tab-intro') || 0); localStorage.setItem('sh-tab-intro', String(n + 1)); } catch (e) { }
+  const tb = $('tabbar'); tb.classList.add('intro');
+  if (n < 5) { const tip = document.createElement('div'); tip.className = 'tbtip'; tip.textContent = isOwner ? 'من هنا: الرئيسية، الخريطة، الشات، والإعدادات' : 'من هنا: البصمة، موقعي المباشر، والشات'; tb.querySelector('.tb-in').appendChild(tip); setTimeout(() => { tip.classList.add('out'); setTimeout(() => tip.remove(), 500); }, 6000); }
+  setTimeout(() => tb.classList.remove('intro'), 5500);
+}
 function paintTabs() {
-  const tabs = isOwner ? TABS_OWN : TABS_EMP;
-  $('tabbar').innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => `<button data-tab="${v}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 22, 1.7)}<span>${l}</span>${v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : ''}${v === 'vLive' && liveOn ? '<i class="livedot"></i>' : ''}</button>`).join('') + `</div>`;
+  const tabs = isOwner ? TABS_OWN : TABS_EMP, tb = $('tabbar');
+  const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
+  const btns = tb.querySelectorAll('[data-tab]');
+  // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
+  if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0])) {
+    btns.forEach((b, i) => { const v = tabs[i][0]; b.setAttribute('aria-current', view === v ? 'page' : 'false'); b.querySelectorAll('.badge,.livedot').forEach(x => x.remove()); b.insertAdjacentHTML('beforeend', extra(v)); });
+  } else {
+    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => `<button data-tab="${v}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
+  }
+  tabIntro();
 }
 $('tabbar').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; vibrate(10); openTab(b.dataset.tab); };
 function openTab(v) {

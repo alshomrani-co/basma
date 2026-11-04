@@ -1,4 +1,4 @@
-const CACHE = 'shamrani-basma-v3';
+const CACHE = 'shamrani-basma-v4';
 const SHELL = [
   './',
   './index.html',

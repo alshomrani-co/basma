@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f5f4f2" id="themeColor">
 <script>var t="light";try{t=localStorage.getItem("sh-theme")||"light";}catch(e){}document.documentElement.setAttribute("data-theme",t);</script>
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
 <link rel="manifest" href="manifest.json?v=1">
@@ -341,16 +342,34 @@ body,.card,.okpi,.authcard,.sheet,.toast,.slot,.kpi{transition:background-color 
 .loader{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--gold);animation:spin 1s linear infinite}
 
 /* tab bar */
-body.has-tabs{padding-bottom:calc(86px + env(safe-area-inset-bottom,0px))}
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px))}
-.tb-in{max-width:560px;margin:0 auto;display:flex;gap:4px}
-.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 4px;border-radius:12px;color:var(--muted);font-size:11px;position:relative;transition:color .25s,background .25s}
-.tabbar button[aria-current="page"]{color:var(--gold);background:var(--gold-soft)}
-.tabbar button[aria-current="page"] svg{animation:tabpop .4s cubic-bezier(.3,1.6,.5,1)}
-@keyframes tabpop{40%{transform:scale(1.18)}}
-.badge{position:absolute;top:2px;right:calc(50% - 22px);min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--gold);color:#fff;font-style:normal;font-size:10px;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface)}
-.livedot{position:absolute;top:6px;right:calc(50% - 16px);width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:livep 1.6s infinite}
+body.has-tabs{padding-bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:8px max(10px,env(safe-area-inset-left,0px)) calc(10px + env(safe-area-inset-bottom,0px))}
+.tb-in{max-width:560px;margin:0 auto;display:flex;gap:6px;padding:6px;border-radius:22px;background:var(--surface);border:1px solid var(--line);box-shadow:0 -6px 28px rgba(215,38,43,.14),0 10px 30px rgba(0,0,0,.12);position:relative}
+.tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 8px;border-radius:16px;color:var(--fg);font-size:12px;font-weight:500;position:relative;transition:color .25s,background .3s,transform .2s}
+.tabbar button svg{width:25px;height:25px;color:var(--gold);transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.tabbar button:active{transform:scale(.94)}
+.tabbar button[aria-current="page"]{background:linear-gradient(150deg,#ef3b3f,#c81e23);color:#fff;box-shadow:0 6px 16px rgba(215,38,43,.4)}
+.tabbar button[aria-current="page"] svg{color:#fff;transform:translateY(-1px) scale(1.08)}
+.tabbar button[aria-current="page"]::after{content:"";position:absolute;bottom:-2px;left:50%;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:#fff;opacity:.85}
+.tabbar button[aria-current="page"] svg{animation:tabpop .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes tabpop{40%{transform:scale(1.25)}}
+.badge{position:absolute;top:3px;right:calc(50% - 26px);min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--gold);color:#fff;font-style:normal;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface);animation:badgep 1.8s ease-in-out infinite}
+.tabbar button[aria-current="page"] .badge{background:#fff;color:var(--gold);border-color:#c81e23}
+@keyframes badgep{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.livedot{position:absolute;top:7px;right:calc(50% - 18px);width:10px;height:10px;border-radius:50%;background:var(--ok);border:2px solid var(--surface);box-shadow:0 0 0 0 var(--ok);animation:livep 1.6s infinite}
 @keyframes livep{70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+/* لفت الانتباه للزراير أول ما التطبيق يفتح */
+.tabbar.intro .tb-in{animation:tbup .7s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes tbup{from{transform:translateY(120%)}}
+.tabbar.intro .tb-in::before{content:"";position:absolute;inset:-3px;border-radius:24px;border:2px solid var(--gold);animation:tbglow 1.4s ease-out 3}
+@keyframes tbglow{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.06,1.35)}}
+.tabbar.intro button:not([aria-current="page"]) svg{animation:tbhop .6s ease both}
+.tabbar.intro button:nth-child(1) svg{animation-delay:.7s}.tabbar.intro button:nth-child(2) svg{animation-delay:.85s}.tabbar.intro button:nth-child(3) svg{animation-delay:1s}.tabbar.intro button:nth-child(4) svg{animation-delay:1.15s}
+@keyframes tbhop{40%{transform:translateY(-7px) scale(1.15)}}
+.tbtip{position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);font-size:13px;padding:8px 14px;border-radius:12px;white-space:nowrap;box-shadow:0 8px 20px rgba(0,0,0,.25);animation:tipin .5s cubic-bezier(.3,1.5,.5,1) .8s both;pointer-events:none}
+.tbtip::after{content:"";position:absolute;top:100%;left:50%;margin-left:-7px;border:7px solid transparent;border-top-color:var(--fg)}
+@keyframes tipin{from{opacity:0;transform:translate(-50%,10px)}}
+.tbtip.out{transition:opacity .4s;opacity:0}
 .hello{display:flex;flex-direction:column;margin-bottom:12px}
 .hello b{font-family:var(--f-display);font-weight:600;font-size:20px}
 .hello span{color:var(--muted);font-size:12px}
