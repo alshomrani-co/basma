@@ -10,6 +10,9 @@ service cloud.firestore {
     function isActiveEmp() {
       return signedIn() && exists(/databases/$(database)/documents/employees/$(request.auth.uid)) && empDoc().data.active == true;
     }
+    // حساب متابعة: يشوف بس، مايعدّلش
+    function isViewer() { return signedIn() && exists(/databases/$(database)/documents/viewers/$(request.auth.uid)); }
+    function canSee() { return isOwner() || isViewer(); }
     function today() { return int(math.floor((request.time.toMillis() + 10800000) / 86400000)); }
     // كل بصمة: وقتها لازم يكون وقت السيرفر، ومينفعش تتعدّل بعد ما تتسجّل
     function stampNew(k) {
@@ -27,9 +30,20 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
+    // حسابات المتابعة: المالك بس اللي يضيف ويحذف
+    match /viewers/{uid} {
+      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow write: if isOwner();
+    }
+
+    // آخر قراية للشات لكل مستخدم (عشان إشعار الرسايل يتشال بعد ما تقراها)
+    match /reads/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
     // الموظفين: المالك يتحكم في كل حاجة، والموظف يقدر يغيّر بصمة جهازه وكلمة السر المؤقتة بس
     match /employees/{uid} {
-      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow read: if canSee() || (signedIn() && request.auth.uid == uid);
       allow create, delete: if isOwner();
       allow update: if isOwner()
         || (signedIn() && request.auth.uid == uid
@@ -38,7 +52,7 @@ service cloud.firestore {
 
     // البصمات اليومية
     match /days/{id} {
-      allow read: if isOwner() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow read: if canSee() || (signedIn() && resource.data.uid == request.auth.uid);
       allow create: if isActiveEmp()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.day == today()
@@ -55,21 +69,34 @@ service cloud.firestore {
 
     // الموقع المباشر: كل موظف يكتب موقعه هو بس، والمالك يشوف الكل
     match /live/{uid} {
-      allow read: if isOwner() || (signedIn() && request.auth.uid == uid);
+      allow read: if canSee() || (signedIn() && request.auth.uid == uid);
       allow write: if isActiveEmp() && request.auth.uid == uid;
       allow delete: if isOwner();
     }
 
     // الشات الداخلي: كل الموظفين والمالك، والمالك بس اللي يحذف
+    // الرسالة نص، أو صورة أو رسالة صوتية مع نص اختياري
     match /chat/{id} {
-      allow read: if isOwner() || isActiveEmp();
-      allow create: if (isOwner() || isActiveEmp())
+      allow read: if canSee() || isActiveEmp();
+      allow create: if (canSee() || isActiveEmp())
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.text is string
-        && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 1000
         && request.resource.data.at == request.time
-        && request.resource.data.owner == isOwner();
+        && request.resource.data.owner == isOwner()
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && (request.resource.data.text.size() > 0
+            || (request.resource.data.get('kind', '') in ['img', 'voice', 'file'] && request.resource.data.media is string));
+      allow delete: if isOwner();
+    }
+
+    // ملفات الصور والرسايل الصوتية للشات
+    match /media/{id} {
+      allow read: if canSee() || isActiveEmp();
+      allow create: if (canSee() || isActiveEmp())
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['img', 'voice', 'file']
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000;
       allow delete: if isOwner();
     }
   }

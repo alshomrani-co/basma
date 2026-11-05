@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=6';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=8';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -60,6 +60,9 @@ const I = {
   trash: "M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3",
   plus: "M12 5v14M5 12h14",
   mic: "M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM5 10a7 7 0 0 0 14 0M8 21h8M12 17v4",
+  clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
+  file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
+  download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
   image: "M15 8h.01M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM3 16l5-5c.93-.9 2.07-.9 3 0l5 5M14 14l1-1c.93-.9 2.07-.9 3 0l3 3",
   play: "M7 4v16l13-8z",
   pause: "M6 5h4v14H6zM14 5h4v14h-4z"
@@ -104,7 +107,8 @@ const ago = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 
 const toEn = s => String(s).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
 
 /* ========== state ========== */
-let me = null, meEmp = null, isOwner = false, view = null, busy = false;
+let me = null, meEmp = null, isOwner = false, isViewer = false, viewerName = '', view = null, busy = false;
+const canSee = () => isOwner || isViewer;
 let emps = [];
 let recs = {};
 let settings = {};
@@ -156,6 +160,7 @@ function empFromDoc(s) {
 }
 
 /* ========== day logic ========== */
+const earlyBy = (r, P) => (r && r.in != null && !P.off && r.in < P.start) ? P.start - r.in : 0;
 const isLate = (r, P) => (r.in != null && r.in > P.start + grace()) || (P.two && r.in2 != null && r.in2 > P.b2 + grace());
 function status(emp, key) {
   const d = fromKey(key), t = today0();
@@ -259,10 +264,10 @@ function alertBoth(kind, title, body, who, tag, go) { toast(kind, title, body, w
 function goTo(target) {
   if (!target || !me) return;
   const [tab, id] = String(target).split(':');
-  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vSet'] : ['vEmp', 'vLive', 'vChat'];
+  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat'];
   if (!ok.includes(tab)) return;
   if (view !== tab) openTab(tab);
-  if (tab === 'vMap' && id && isOwner) setTimeout(() => openLiveSheet(id), 400);
+  if (tab === 'vMap' && id && canSee()) setTimeout(() => openLiveSheet(id), 400);
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.go) goTo(e.data.go); });
 let pendingGo = (location.hash || '').replace('#go=', '').replace('#', '') || null;
@@ -276,6 +281,7 @@ function setDates() { const d = new Date(); $('gDate').textContent = gNow.format
 /* ========== views + tab bar ========== */
 const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet'];
 const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات']];
+const TABS_VIEW = [['vOwn', 'home', 'الحضور'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات']];
 const TABS_OWN = [['vOwn', 'home', 'الرئيسية'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات'], ['vSet', 'gear', 'الإعدادات']];
 function show(id) {
   if (id !== 'vChat' && typeof rec !== 'undefined' && rec) stopRec(false);
@@ -293,11 +299,11 @@ function tabIntro() {
   if (introShown) return; introShown = true;
   let n = 0; try { n = +(localStorage.getItem('sh-tab-intro') || 0); localStorage.setItem('sh-tab-intro', String(n + 1)); } catch (e) { }
   const tb = $('tabbar'); tb.classList.add('intro');
-  if (n < 5) { const tip = document.createElement('div'); tip.className = 'tbtip'; tip.textContent = isOwner ? 'من هنا: الرئيسية، الخريطة، الشات، والإعدادات' : 'من هنا: البصمة، موقعي المباشر، والشات'; tb.querySelector('.tb-in').appendChild(tip); setTimeout(() => { tip.classList.add('out'); setTimeout(() => tip.remove(), 500); }, 6000); }
+  if (n < 5) { const tip = document.createElement('div'); tip.className = 'tbtip'; tip.textContent = isOwner ? 'من هنا: الرئيسية، الخريطة، الشات، والإعدادات' : isViewer ? 'من هنا: الحضور، الخريطة، والشات' : 'من هنا: البصمة، موقعي المباشر، والشات'; tb.querySelector('.tb-in').appendChild(tip); setTimeout(() => { tip.classList.add('out'); setTimeout(() => tip.remove(), 500); }, 6000); }
   setTimeout(() => tb.classList.remove('intro'), 5500);
 }
 function paintTabs() {
-  const tabs = isOwner ? TABS_OWN : TABS_EMP, tb = $('tabbar');
+  const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : TABS_EMP, tb = $('tabbar');
   const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
@@ -752,7 +758,7 @@ function renderLive() {
   v.innerHTML = `<section class="card reveal">
     <h2>موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
     <p class="muted small" style="margin:0 0 12px">لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.</p>
-    <div class="map" id="myMap"></div>
+    <div class="mapwrap" id="myWrap"><div class="map mini" id="myMap"></div><button class="mapbtn" id="myExp" type="button" aria-label="تكبير الخريطة">${ic("plus", 18)}<span>تكبير</span></button></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
     <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ لايف لوكيشن'}</button>
     <div class="err" id="lvErr" style="text-align:center"></div>
@@ -762,6 +768,7 @@ function renderLive() {
     </ul>
   </section>`;
   $('lvBtn').onclick = () => { vibrate(20); liveOn ? stopLive(true) : startLive(); };
+  bindMapToggle('myWrap', () => myMap);
   loadLeaflet().then(L => {
     if (view !== 'vLive') return;
     myMap = L.map('myMap', { zoomControl: true, attributionControl: true }).setView(lastFix ? [lastFix.lat, lastFix.lng] : [24.7136, 46.6753], lastFix ? 16 : 11);
@@ -802,7 +809,7 @@ async function stopLive(user) {
   if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; liveOn = false;
   if (user) { try { localStorage.removeItem('sh-live'); } catch (e) { } }
   try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) { }
-  if (me && !isOwner) { try { await setDoc(doc(db, 'live', me.uid), { on: false, at: serverTimestamp() }, { merge: true }); } catch (e) { } }
+  if (me && meEmp && !canSee()) { try { await setDoc(doc(db, 'live', me.uid), { on: false, at: serverTimestamp() }, { merge: true }); } catch (e) { } }
   if (user) toast('info', 'تم إيقاف مشاركة الموقع', '', 'موقعي المباشر');
   if (view === 'vLive') renderLive(); paintTabs();
 }
@@ -829,6 +836,13 @@ document.addEventListener('visibilitychange', () => {
 function resumeLive() { let want = false; try { want = localStorage.getItem('sh-live') === '1'; } catch (e) { } if (want && !liveOn && meEmp && meEmp.active) startLive(); }
 
 /* ----- Leaflet (الخريطة) ----- */
+// الخريطة صغيرة، وتكبر لما تدوس عليها أو على زرار التكبير
+function bindMapToggle(wrapId, getMap) {
+  const w = $(wrapId); if (!w) return; const m = w.querySelector('.map'), b = w.querySelector('.mapbtn');
+  const set = big => { m.classList.toggle('mini', !big); m.classList.toggle('big', big); b.innerHTML = big ? `${ic('x', 18)}<span>تصغير</span>` : `${ic('plus', 18)}<span>تكبير</span>`; setTimeout(() => { const mp = getMap(); mp && mp.invalidateSize && mp.invalidateSize(); }, 380); if (big) w.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); };
+  b.onclick = e => { e.stopPropagation(); set(m.classList.contains('mini')); };
+  m.addEventListener('click', () => { if (m.classList.contains('mini')) set(true); }, true);
+}
 let leafletP = null;
 function loadLeaflet() {
   if (window.L) return Promise.resolve(window.L);
@@ -853,7 +867,7 @@ function onLive(snap) {
     if (c.type === 'removed') { delete lives[c.doc.id]; return; }
     const d = c.doc.data(); lives[c.doc.id] = { ...d, id: c.doc.id, atMs: d.at && d.at.toMillis ? d.at.toMillis() : Date.now() };
   });
-  if (!liveFirst && isOwner) {
+  if (!liveFirst && canSee()) {
     snap.docChanges().forEach(c => {
       if (c.type === 'removed') return;
       const now = lives[c.doc.id], was = prev[c.doc.id], name = now.name || 'موظف';
@@ -932,14 +946,14 @@ function renderMap() {
   const v = $('vMap');
   v.innerHTML = `<section class="card reveal">
     <h2>الخريطة المباشرة <span class="muted small" id="mpCount" style="font-family:var(--f-body)"></span></h2>
-    <div class="map tall" id="ownMap"></div>
+    <div class="mapwrap" id="ownWrap"><div class="map mini" id="ownMap"></div><button class="mapbtn" id="ownExp" type="button" aria-label="تكبير الخريطة">${ic("plus", 18)}<span>تكبير</span></button></div>
     <label class="switch"><input type="checkbox" id="mpEvery" ${liveEvery() ? 'checked' : ''}><span>إشعار مع كل تحديث في اللايف (مرة كل دقيقة بحد أقصى لكل موظف)</span></label>
     <div class="lvhead"><b>اللي شغّالين لايف لوكيشن</b><span class="muted small">اضغط على أي اسم لتفاصيل مكانه والاتجاهات</span></div>
     <div id="mpList" class="lvtable"></div>
   </section>`;
   $('mpEvery').onchange = e => { try { localStorage.setItem('sh-live-every', e.target.checked ? '1' : '0'); } catch (x) { } askNotify(); };
   $('mpList').onclick = e => { const b = e.target.closest('[data-focus]'); if (!b) return; openLiveSheet(b.dataset.focus); };
-  ownMarks = {}; ownLines = {}; ownMap = null;
+  ownMarks = {}; ownLines = {}; ownMap = null; bindMapToggle('ownWrap', () => ownMap);
   loadLeaflet().then(L => {
     if (view !== 'vMap') return;
     ownMap = L.map('ownMap').setView([24.7136, 46.6753], 11);
@@ -976,9 +990,19 @@ function markerClick(id) { openLiveSheet(id); }
 
 /* ========== chat ========== */
 let chatFirst = true;
-const lastRead = () => { try { return +(localStorage.getItem('sh-chat-read-' + (me && me.uid)) || 0); } catch (e) { return 0; } };
+let remoteRead = 0, readSaved = 0;
+const lastRead = () => { let l = 0; try { l = +(localStorage.getItem('sh-chat-read-' + (me && me.uid)) || 0); } catch (e) { } return Math.max(l, remoteRead); };
+// آخر قراية للشات محفوظة أونلاين، عشان لما تخرج وتدخل أو تفتح من جهاز تاني الإشعار مايرجعش
+function onReads(s) { const v = s.exists() ? +(s.data().chat || 0) : 0; if (v > remoteRead) { remoteRead = v; readSaved = Math.max(readSaved, v); if (!$('tabbar').hidden) paintTabs(); setBadge(); } }
+function clearChatNotifs() { try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(r => r && r.getNotifications ? r.getNotifications({ tag: 'chat' }) : []).then(ns => ns.forEach(n => n.close())).catch(() => { }); } catch (e) { } }
 const unread = () => { const lr = lastRead(); return msgs.filter(m => m.atMs > lr && m.uid !== (me && me.uid)).length; };
-function markChatRead() { try { const t = msgs.length ? Math.max(...msgs.map(m => m.atMs)) : Date.now(); localStorage.setItem('sh-chat-read-' + me.uid, String(Math.max(t, lastRead()))); } catch (e) { } setBadge(); }
+function markChatRead() {
+  if (!me) return;
+  const t = Math.max(Date.now(), msgs.length ? Math.max(...msgs.map(m => m.atMs)) : 0, lastRead());
+  try { localStorage.setItem('sh-chat-read-' + me.uid, String(t)); } catch (e) { }
+  if (t - readSaved > 3000) { readSaved = t; remoteRead = Math.max(remoteRead, t); setDoc(doc(db, 'reads', me.uid), { chat: t }, { merge: true }).catch(() => { readSaved = 0; }); }
+  clearChatNotifs(); setBadge(); if (!$('tabbar').hidden) paintTabs();
+}
 function onChat(snap) {
   const added = [];
   snap.docChanges().forEach(c => { if (c.type === 'added' && !c.doc.metadata.hasPendingWrites) added.push(c.doc); });
@@ -986,7 +1010,7 @@ function onChat(snap) {
   if (!chatFirst) {
     added.forEach(d => {
       const m = d.data(); if (m.uid === me.uid) return;
-      const who = m.name + (m.dept ? ' · ' + m.dept : ''), txt = (m.kind === 'img' ? '📷 صورة' + (m.text ? ' · ' : '') : m.kind === 'voice' ? '🎤 رسالة صوتية ' + fmtDur(m.dur || 0) : '') + String(m.text || '').slice(0, 140);
+      const who = m.name + (m.dept ? ' · ' + m.dept : ''), txt = (m.kind === 'img' ? '📷 صورة' + (m.text ? ' · ' : '') : m.kind === 'voice' ? '🎤 رسالة صوتية ' + fmtDur(m.dur || 0) : m.kind === 'file' ? '📎 ' + (m.fname || 'ملف') + (m.text ? ' · ' : '') : '') + String(m.text || '').slice(0, 140);
       if (view !== 'vChat') toast('chat', who, txt, 'الشات الداخلي');
       if (view !== 'vChat' || document.hidden) sysNotify('💬 ' + who, txt, 'chat', 'vChat');
       else vibrate(20);
@@ -1005,13 +1029,15 @@ function renderChat() {
     ${chatNotifCta()}
     <div class="msgs" id="msgs"></div>
     <form class="composer" id="chatForm">
-     <button class="cbtn" id="chatImg" type="button" aria-label="إرفاق صورة">${ic('image', 21)}</button>
+     <button class="cbtn" id="chatImg" type="button" aria-label="إرفاق صورة أو ملف">${ic('clip', 21)}</button>
      <textarea id="chatIn" rows="1" maxlength="1000" placeholder="اكتب رسالة…" aria-label="رسالة"></textarea>
      <button class="btn primary" id="chatSend" type="submit" aria-label="إرسال" hidden>${ic('send', 18)}</button>
      <button class="btn primary" id="chatMic" type="button" aria-label="تسجيل رسالة صوتية">${ic('mic', 20)}</button>
      <div class="recbar" id="recBar" hidden><button type="button" class="cbtn" id="recCancel" aria-label="إلغاء التسجيل">${ic('trash', 19)}</button><span class="recdot"></span><b class="num" id="recT">0:00</b><span class="muted small">جارٍ التسجيل…</span><button type="button" class="btn primary" id="recSend" aria-label="إرسال الرسالة الصوتية">${ic('send', 18)}</button></div>
+    <div class="attmenu" id="attMenu" hidden><button type="button" data-att="img">${ic('image', 18)} صورة</button><button type="button" data-att="file">${ic('file', 18)} ملف <small>لحد ${FILE_MAX_TXT}</small></button></div>
     </form>
     <input type="file" id="chatFile" accept="image/*" hidden>
+    <input type="file" id="chatDoc" hidden>
   </section>`;
   const ta = $('chatIn');
   ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; const has = !!ta.value.trim(); $('chatSend').hidden = !has; $('chatMic').hidden = has; };
@@ -1019,18 +1045,31 @@ function renderChat() {
   $('chatForm').onsubmit = async e => {
     e.preventDefault(); const text = ta.value.trim(); if (!text) return;
     ta.value = ''; ta.oninput();
-    try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : meEmp.name, dept: isOwner ? '' : (meEmp.dept || ''), owner: isOwner, text, at: serverTimestamp() }); }
+    try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), owner: isOwner, text, at: serverTimestamp() }); }
     catch (err) { toast('bad', 'لم تُرسل الرسالة', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); ta.value = text; }
   };
   $('msgs').onclick = async e => {
     const pl = e.target.closest('[data-voice]'); if (pl) { playVoice(pl); return; }
     const im = e.target.closest('[data-media] img'); if (im && im.dataset.full) { openViewer(im.src); return; }
+    const fl = e.target.closest('[data-file]'); if (fl) { openFile(fl); return; }
     const b = e.target.closest('[data-del]'); if (!b || !isOwner) return;
     const m = msgs.find(x => x.id === b.dataset.del);
     try { await deleteDoc(doc(db, 'chat', b.dataset.del)); if (m && m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); } catch (x) { toast('bad', 'تعذّر الحذف', '', 'الشات'); }
   };
   // صورة
-  $('chatImg').onclick = () => { $('chatFile').value = ''; $('chatFile').click(); };
+  const am = $('attMenu');
+  $('chatImg').onclick = e => { e.stopPropagation(); am.hidden = !am.hidden; };
+  document.addEventListener('click', ev => { if (am && !am.hidden && !am.contains(ev.target)) am.hidden = true; });
+  am.onclick = e => { const b = e.target.closest('[data-att]'); if (!b) return; am.hidden = true; const inp = b.dataset.att === 'img' ? $('chatFile') : $('chatDoc'); inp.value = ''; inp.click(); };
+  $('chatDoc').onchange = async () => {
+    const f = $('chatDoc').files && $('chatDoc').files[0]; if (!f) return;
+    if (f.type.startsWith('image/')) { $('chatFile').files = $('chatDoc').files; $('chatFile').onchange(); return; }
+    if (f.size > FILE_MAX) { toast('bad', 'الملف كبير', `الحد ${FILE_MAX_TXT} · الملف ده ${fmtSize(f.size)}. ابعته واتساب أو إيميل`, 'الشات'); return; }
+    const cap = ta.value.trim(); ta.value = ''; ta.oninput();
+    toast('info', 'جارٍ إرسال الملف…', f.name, 'الشات');
+    try { const data = await readURL(f); await sendMedia('file', data, { text: cap, fname: f.name.slice(0, 120), size: f.size }); }
+    catch (x) { toast('bad', 'لم يُرسل الملف', errWhy(x), 'الشات'); }
+  };
   $('chatFile').onchange = async () => {
     const f = $('chatFile').files && $('chatFile').files[0]; if (!f) return;
     const cap = ta.value.trim(); ta.value = ''; ta.oninput();
@@ -1075,8 +1114,22 @@ async function loadMedia(id) {
 }
 function mediaHTML(m) {
   if (m.kind === 'img') return `<div class="mimg" data-media="${esc(m.media)}" style="aspect-ratio:${m.w || 4}/${m.h || 3}"><img alt="صورة" src="${m.thumb || ''}"></div>`;
+  if (m.kind === 'file') return `<button type="button" class="mfile" data-file="${esc(m.media)}" data-name="${esc(m.fname || 'ملف')}" aria-label="فتح الملف ${esc(m.fname || '')}"><span class="fi">${ic('file', 20)}<em>${esc(extOf(m.fname))}</em></span><span class="fn"><b>${esc(m.fname || 'ملف')}</b><small>${fmtSize(m.size || 0)}</small></span><span class="dl">${ic('download', 18)}</span></button>`;
   if (m.kind === 'voice') return `<button type="button" class="mvoice" data-voice="${esc(m.media)}" data-dur="${m.dur || 0}" aria-label="تشغيل الرسالة الصوتية"><span class="pp">${ic('play', 16)}</span><span class="wave"><i style="width:0%"></i></span><span class="num dur">${fmtDur(m.dur || 0)}</span></button>`;
   return '';
+}
+const FILE_MAX = 700 * 1024, FILE_MAX_TXT = '٧٠٠ كيلو';
+const fmtSize = b => b < 1024 ? ar(b) + ' بايت' : b < 1048576 ? ar(Math.round(b / 1024)) + ' كيلو' : ar((b / 1048576).toFixed(1)) + ' ميجا';
+const extOf = n => { const m = /\.([a-z0-9]{1,5})$/i.exec(n || ''); return m ? m[1].toUpperCase() : 'FILE'; };
+async function openFile(btn) {
+  btn.classList.add('loading');
+  const src = await loadMedia(btn.dataset.file).catch(() => null); btn.classList.remove('loading');
+  if (!src) { toast('bad', 'تعذّر فتح الملف', 'ربما اتحذف أو الإنترنت ضعيف', 'الشات'); return; }
+  try {
+    const blob = await (await fetch(src)).blob(), url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = btn.dataset.name; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) { toast('bad', 'تعذّر فتح الملف', '', 'الشات'); }
 }
 const errWhy = e => { const c = (e && (e.code || e.name || e.message)) || ''; if (String(c).includes('permission')) return 'قواعد الحماية في Firebase محتاجة تتحدّث (permission-denied)'; if (String(c).includes('unavailable') || String(c).includes('network')) return 'تأكد من الإنترنت وحاول مرة أخرى'; return 'حاول مرة أخرى' + (c ? ' · ' + c : ''); };
 const voiceReady = {};
@@ -1128,7 +1181,7 @@ async function packImage(file) {
 async function sendMedia(kind, data, extra) {
   const ref = await addDoc(collection(db, 'media'), { uid: me.uid, kind, data, at: serverTimestamp() });
   mediaCache[ref.id] = Promise.resolve(data);
-  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : meEmp.name, dept: isOwner ? '' : (meEmp.dept || ''), owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, at: serverTimestamp() });
+  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, fname: extra.fname || null, size: extra.size || null, at: serverTimestamp() });
 }
 const REC_MAX = 120;
 let rec = null;
@@ -1179,7 +1232,8 @@ function evHTML(x, isNew) {
   const kind = x.late ? 'warn' : x.f === 'out1' || x.f === 'in2' ? 'info' : x.f === 'out' ? 'gold' : 'ok';
   const icon = x.f === 'in' ? 'login' : x.f === 'out' ? 'logout' : 'coffee';
   const m = x.method && MI[x.method] ? MI[x.method][1] : '';
-  return `<div class="ev${isNew ? ' new' : ''}"><div class="ico i-${kind}">${ic(icon, 16)}</div><div class="tx">${esc(e.name)} · ${FL[x.f]}${x.late ? ' متأخر' : ''}<small>${tm(x.t)}${m ? ' · بصمة ' + m : ''}${e.dept ? ' · ' + esc(e.dept) : ''}</small></div></div>`;
+  const P0 = todayPlan(), early = x.f === 'in' && !P0.off && x.t < P0.start;
+  return `<div class="ev${isNew ? ' new' : ''}"><div class="ico i-${kind}">${ic(icon, 16)}</div><div class="tx">${esc(e.name)} · ${FL[x.f]}${x.late ? ' متأخر' : early ? ' بدري' : ''}<small>${tm(x.t)}${m ? ' · بصمة ' + m : ''}${e.dept ? ' · ' + esc(e.dept) : ''}</small></div></div>`;
 }
 function renderFeed(isNew) {
   const el = $('feed'); if (!el) return;
@@ -1198,11 +1252,12 @@ function renderOwner() {
   const dCount = d => emps.filter(e => e.dept === d && e.active).length;
   const liveCount = Object.values(lives).filter(fresh).length;
   v.innerHTML = `
-  <div class="hello reveal"><b>أهلاً بك في لوحة التحكم</b><span>${esc(COMPANY)}</span></div>
+  <div class="hello reveal"><b>${isViewer ? 'متابعة الحضور والانصراف' : 'أهلاً بك في لوحة التحكم'}</b><span>${isViewer ? 'حساب مشاهدة فقط · ' : ''}${esc(COMPANY)}</span></div>
   <div class="okpis reveal">
    <div class="okpi g"><div class="l">${ic('login', 14)}حاضر الآن</div><b class="num" data-c="${cnt(['present', 'late'])}">٠</b></div>
    <div class="okpi r"><div class="l">${ic('alert', 14)}لم يسجّل</div><b class="num" data-c="${cnt(['missing'])}">٠</b></div>
    <div class="okpi a"><div class="l">${ic('clock', 14)}متأخر</div><b class="num" data-c="${cnt(['late'])}">٠</b></div>
+   <div class="okpi e"><div class="l">${ic('check', 14)}حضر بدري</div><b class="num" data-c="${act.filter(e => earlyBy(getRec(e, key), P) > 0).length}">٠</b></div>
    <div class="okpi i"><div class="l">${ic('live', 14)}موقع مباشر</div><b class="num" data-c="${liveCount}">٠</b></div>
   </div>
   <div class="card reveal" style="margin-bottom:16px;animation-delay:.06s"><h2>دوام اليوم <span class="muted small" style="font-family:var(--f-body)">${DAYS[fromKey(key).getDay()]} · فترة السماح ${ar(grace())} د</span></h2>${bandHTML(P)}</div>
@@ -1215,18 +1270,19 @@ function renderOwner() {
     <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb);
-      const line = !e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => FL[f] + ' ' + tm(r[f])).join(' · ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم');
+      const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
+      const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => FL[f] + ' ' + tm(r[f])).join(' · ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '');
       const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop(); const lv = fresh(lives[e.id]);
       return `<button class="emp" data-emp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span></div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
-    }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
-    <form class="form addform" id="addForm" novalidate>
+    }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : isViewer ? 'لا يوجد موظفون بعد' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
+    ${isViewer ? '' : `<form class="form addform" id="addForm" novalidate>
      <div class="fl"><label for="nName">اسم الموظف</label><input id="nName" autocomplete="off" placeholder="أحمد محمد"></div>
      <div class="fl"><label for="nNum">اسم المستخدم (حروف وأرقام)</label><input id="nNum" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ahmed1 أو أحمد1"></div>
      <div class="fl"><label for="nDept">القسم</label><select id="nDept"><option value="">اختر القسم</option>${DEPTS.map(d => `<option ${deptFilter === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
      <div class="fl"><label for="nPass">كلمة سر مؤقتة</label><input id="nPass" autocomplete="new-password" placeholder="٦ أرقام على الأقل"></div>
      <button class="btn primary" type="submit" id="addBtn">${ic('userplus', 16)} إضافة موظف</button>
      <div class="err" id="addErr"></div>
-    </form>
+    </form>`}
    </section>
    <section class="card reveal" style="animation-delay:.16s">
     <h2>الإشعارات <span style="color:var(--gold)">${ic('bell', 18)}</span></h2>
@@ -1240,7 +1296,7 @@ function renderOwner() {
   $('empList').onclick = e => { const b = e.target.closest('[data-emp]'); if (b) openSheet(b.dataset.emp); };
   v.querySelector('.depts').onclick = e => { const b = e.target.closest('[data-dept]'); if (!b) return; deptFilter = b.dataset.dept; renderOwner(); };
   const nb = $('notifBtn'); if (nb) nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } renderOwner(); };
-  bindAdd();
+  if (!isViewer) bindAdd();
 }
 function bindAdd() {
   const n = $('nName'), u = $('nNum'), dp = $('nDept'), p = $('nPass'), er = $('addErr'), btn = $('addBtn');
@@ -1268,7 +1324,7 @@ function bindAdd() {
 let secondary = null;
 function getSecondary() { if (!secondary) { const a = initializeApp(firebaseConfig, 'secondary'); secondary = { app: a, auth: getAuth(a) }; } return secondary; }
 function checkOwnerAlerts() {
-  if (!isOwner) return;
+  if (!canSee()) return;
   const key = todayKey(), P = todayPlan(); if (P.off) return;
   const n = nowMin(), G = grace();
   emps.filter(e => e.active && e.start <= key).forEach(e => {
@@ -1283,6 +1339,12 @@ function checkOwnerAlerts() {
 let sheetEmp = null;
 function openSheet(id) {
   const emp = empById(id); if (!emp) return; sheetEmp = id; liveSheetId = null;
+  if (isViewer) {
+    const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'), r = getRec(emp, todayKey()), av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
+    inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.dept || '')}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div><div class="card" style="padding:16px"><div id="shProf"></div></div>`;
+    sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+    mountProfile($('shProf'), emp, true); $('shClose').onclick = closeSheet; sc.onclick = closeSheet; return;
+  }
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner');
   const r = getRec(emp, todayKey()); const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
   const g = emp.geo || { mode: 'sites' }, ids = Array.isArray(g.ids) ? g.ids : sites().map(s => s.id);
@@ -1361,6 +1423,18 @@ function renderSet() {
    <button class="btn primary" id="schSave" type="button" style="margin-top:14px;width:100%">حفظ مواعيد العمل</button>
    <div class="err" id="schErr"></div>
   </section>
+  <section class="card reveal" style="margin-top:16px;animation-delay:.08s">
+   <h2>حسابات المتابعة <span class="muted small" style="font-family:var(--f-body)">مشاهدة فقط</span></h2>
+   <p class="muted small" style="margin:0 0 10px">حساب يشوف الحضور والانصراف: مين جه بدري ومين اتأخر، والخريطة، والشات، من غير ما يقدر يعدّل أي حاجة.</p>
+   <div id="viewerList"><p class="muted small">جارٍ التحميل…</p></div>
+   <form class="form addform" id="vwForm" novalidate>
+    <div class="fl"><label for="vwName">الاسم</label><input id="vwName" autocomplete="off" placeholder="مدير المكتب"></div>
+    <div class="fl"><label for="vwUser">اسم المستخدم</label><input id="vwUser" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="manager1"></div>
+    <div class="fl"><label for="vwPass">كلمة السر</label><input id="vwPass" autocomplete="new-password" placeholder="٦ أحرف على الأقل"></div>
+    <button class="btn primary" type="submit" id="vwBtn">${ic('userplus', 16)} إضافة حساب متابعة</button>
+    <div class="err" id="vwErr"></div>
+   </form>
+  </section>
   <section class="card reveal" style="margin-top:16px;animation-delay:.1s">
    <h2>مواقع العمل</h2>
    <p class="muted small" style="margin:0 0 10px">الفروع ومواقع المشاريع اللي مسموح التسجيل منها. من صفحة كل موظف تحدد هو يسجّل من أنهي موقع، أو من أي مكان.</p>
@@ -1374,6 +1448,7 @@ function renderSet() {
     <div class="err" id="sErr"></div>
    </form>
   </section>`;
+  bindViewers();
   // grace
   $('gForm').onsubmit = async e => {
     e.preventDefault(); const g = parseInt(toEn($('gMin').value), 10);
@@ -1440,8 +1515,38 @@ function renderSet() {
   };
 }
 
+let viewers = [];
+function paintViewers() {
+  const el = $('viewerList'); if (!el) return;
+  el.innerHTML = viewers.length ? viewers.map(v => `<div class="site"><div class="ico i-info">${ic('lock', 16)}</div><div class="tx"><b>${esc(v.name)}</b><small>اسم المستخدم: ${esc(v.num)} · مشاهدة فقط</small></div><button class="navb" data-delvw="${v.id}" aria-label="حذف ${esc(v.name)}">${ic('trash', 15)}</button></div>`).join('') : '<p class="muted small">لا توجد حسابات متابعة بعد.</p>';
+}
+function bindViewers() {
+  paintViewers();
+  const n = $('vwName'), u = $('vwUser'), p = $('vwPass'), er = $('vwErr'), btn = $('vwBtn');
+  [n, u, p].forEach(x => x.oninput = () => er.textContent = '');
+  $('vwForm').onsubmit = async e => {
+    e.preventDefault();
+    const name = n.value.trim(), num = toEn(u.value.trim()), pass = p.value;
+    if (name.length < 2) { er.textContent = 'اكتب الاسم'; n.focus(); return; }
+    if (!USER_OK.test(normUser(num))) { er.textContent = 'اسم المستخدم من ٢ لـ ٢٤ حرف: حروف وأرقام فقط'; u.focus(); return; }
+    if (emps.some(x => normUser(x.num) === normUser(num)) || viewers.some(x => normUser(x.num) === normUser(num))) { er.textContent = 'اسم المستخدم مستخدم بالفعل'; u.focus(); return; }
+    if (pass.length < 6) { er.textContent = 'كلمة السر ٦ أحرف أو أرقام على الأقل'; p.focus(); return; }
+    btn.disabled = true;
+    try {
+      const sec = getSecondary(); const cred = await createUserWithEmailAndPassword(sec.auth, toEmail(num), pass);
+      await setDoc(doc(db, 'viewers', cred.user.uid), { name, num, createdAt: serverTimestamp() }); await signOut(sec.auth);
+      toast('ok', 'تمت إضافة حساب متابعة', name + ' · يدخل باسم المستخدم «' + num + '»', 'الإعدادات'); n.value = u.value = p.value = '';
+    } catch (x) { er.textContent = authMsg(x); } finally { btn.disabled = false; }
+  };
+  $('viewerList').onclick = async e => {
+    const b = e.target.closest('[data-delvw]'); if (!b) return;
+    if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.classList.add('danger'); toast('warn', 'اضغط مرة ثانية لحذف الحساب', '', 'الإعدادات'); setTimeout(() => { b.dataset.sure = ''; b.classList.remove('danger'); }, 3500); return; }
+    try { await deleteDoc(doc(db, 'viewers', b.dataset.delvw)); toast('ok', 'تم حذف حساب المتابعة', 'مش هيقدر يدخل تاني', 'الإعدادات'); } catch (x) { toast('bad', 'تعذّر الحذف', '', 'الإعدادات'); }
+  };
+}
+
 /* ========== data wiring ========== */
-function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; }
+function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; }
 function onDays(snap) {
   const changes = firstDays ? [] : snap.docChanges();
   const prev = {};
@@ -1451,7 +1556,7 @@ function onDays(snap) {
     recs[d.uid] = recs[d.uid] || {};
     if (c.type === 'removed') delete recs[d.uid][k]; else recs[d.uid][k] = docToRec(d);
   });
-  if (isOwner && !firstDays) {
+  if (canSee() && !firstDays) {
     const P = todayPlan(), G = grace();
     changes.forEach(c => {
       if (c.type === 'removed') return; const d = c.doc.data(); if (d.day !== todayIdx()) return;
@@ -1482,20 +1587,31 @@ function refresh() {
 onAuthStateChanged(auth, u => {
   const wasLive = liveOn; if (wasLive) { if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; liveOn = false; }
   stopAll();
-  if (!u) { me = null; isOwner = false; renderLogin(); return; }
-  me = u; isOwner = u.uid === OWNER_UID;
+  if (!u) { me = null; isOwner = false; isViewer = false; renderLogin(); return; }
+  me = u; isOwner = u.uid === OWNER_UID; isViewer = false;
   $('userChip').textContent = isOwner ? 'المالك' : '';
+  if (!isOwner) {
+    renderMsg('جارٍ تحميل حسابك…', '');
+    getDoc(doc(db, 'viewers', u.uid)).then(v => { if (me !== u) return; if (v.exists()) { isViewer = true; viewerName = v.data().name || 'متابع'; } startSession(u); }).catch(() => { if (me === u) startSession(u); });
+    return;
+  }
+  startSession(u);
+});
+function startSession(u) {
+  if (isViewer) $('userChip').textContent = viewerName + ' · متابعة';
   unsubs.push(onSnapshot(doc(db, 'settings', 'main'), s => { settings = s.exists() ? s.data() : {}; refresh(); }, () => { }));
   unsubs.push(onSnapshot(query(collection(db, 'chat'), orderBy('at', 'desc'), limit(300)), onChat, () => { }));
   const yearStart = idxOfKey(today0().getFullYear() + '-01-01');
-  if (isOwner) {
+  unsubs.push(onSnapshot(doc(db, 'reads', u.uid), onReads, () => { }));
+  if (canSee()) {
     renderMsg('جارٍ تحميل البيانات…', '');
     let gotEmps = false;
     unsubs.push(onSnapshot(collection(db, 'employees'), s => {
-      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome('المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
+      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? viewerName.split(' ')[0] : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
     }, err => renderMsg('تعذّر تحميل الموظفين', 'تأكد من لصق قواعد الحماية في Firebase وأن رقم المالك صحيح.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', yearStart)), onDays, () => { }));
     unsubs.push(onSnapshot(collection(db, 'live'), onLive, () => { }));
+    if (isOwner) unsubs.push(onSnapshot(collection(db, 'viewers'), s => { viewers = s.docs.map(d => ({ id: d.id, ...d.data() })); paintViewers(); }, () => { }));
   } else {
     renderMsg('جارٍ تحميل حسابك…', '');
     let first = true;
@@ -1510,7 +1626,7 @@ onAuthStateChanged(auth, u => {
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('uid', '==', u.uid)), onDays, () => { }));
   }
-});
+}
 $('logoutBtn').onclick = async () => { closeSheetIfOpen(); if (liveOn) await stopLive(true); await signOut(auth); };
 function closeSheetIfOpen() { if (!$('sheet').hidden) closeSheet(); }
 addEventListener('resize', () => document.querySelectorAll('.tabs').forEach(movePill));
@@ -1532,6 +1648,21 @@ document.addEventListener('click', e => {
   paintThemeBtns(); vibrate(15);
 });
 paintThemeBtns();
+(() => { let n = 0; try { n = +(localStorage.getItem('sh-theme-hint') || 0); localStorage.setItem('sh-theme-hint', String(n + 1)); } catch (e) { }
+  if (n < 6) { document.documentElement.classList.add('theme-hint'); setTimeout(() => document.documentElement.classList.remove('theme-hint'), 9000); } })();
+
+/* ----- تنبيه: افتح التطبيق من الهوم سكرين عشان يفضل مسجّل ويشتغل أحسن ----- */
+(() => {
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+  let hide = false; try { hide = sessionStorage.getItem('sh-inst-hide') === '1'; } catch (e) { }
+  if (standalone || !mobile || hide) return;
+  const ios = /iPhone|iPad/i.test(navigator.userAgent), inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\//i.test(navigator.userAgent);
+  const bar = document.createElement('div'); bar.className = 'instbar';
+  bar.innerHTML = `<div><b>${inApp ? 'افتح الرابط في المتصفح' : 'ثبّت التطبيق على الشاشة الرئيسية'}</b><span>${inApp ? 'من داخل الواتساب تسجيل الدخول بيتمسح. افتحه في ' + (ios ? 'Safari' : 'Chrome') + ' وثبّته على الشاشة الرئيسية.' : ios ? 'من Safari العادي (مش الخاص): زرار المشاركة ⬆️ ثم «إضافة إلى الشاشة الرئيسية». كده هيفضل مسجّل دخول والإشعارات توصلك.' : 'من Chrome: النقط الثلاث ⋮ ثم «إضافة إلى الشاشة الرئيسية». كده هيفضل مسجّل دخول والإشعارات توصلك.'}</span></div><button aria-label="إخفاء">${ic('x', 16)}</button>`;
+  bar.querySelector('button').onclick = () => { bar.remove(); try { sessionStorage.setItem('sh-inst-hide', '1'); } catch (e) { } };
+  document.body.appendChild(bar);
+})();
 
 /* ========== boot ========== */
 (async () => { try { if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) { window.__bio = true; if (view === 'vEmp' && !busy) renderEmp(); } } catch (e) { } })();
