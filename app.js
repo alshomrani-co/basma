@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=8';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=9';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -758,7 +758,7 @@ function renderLive() {
   v.innerHTML = `<section class="card reveal">
     <h2>موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
     <p class="muted small" style="margin:0 0 12px">لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.</p>
-    <div class="mapwrap" id="myWrap"><div class="map mini" id="myMap"></div><button class="mapbtn" id="myExp" type="button" aria-label="تكبير الخريطة">${ic("plus", 18)}<span>تكبير</span></button></div>
+    <div class="map" id="myMap"></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
     <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ لايف لوكيشن'}</button>
     <div class="err" id="lvErr" style="text-align:center"></div>
@@ -768,7 +768,6 @@ function renderLive() {
     </ul>
   </section>`;
   $('lvBtn').onclick = () => { vibrate(20); liveOn ? stopLive(true) : startLive(); };
-  bindMapToggle('myWrap', () => myMap);
   loadLeaflet().then(L => {
     if (view !== 'vLive') return;
     myMap = L.map('myMap', { zoomControl: true, attributionControl: true }).setView(lastFix ? [lastFix.lat, lastFix.lng] : [24.7136, 46.6753], lastFix ? 16 : 11);
@@ -836,13 +835,6 @@ document.addEventListener('visibilitychange', () => {
 function resumeLive() { let want = false; try { want = localStorage.getItem('sh-live') === '1'; } catch (e) { } if (want && !liveOn && meEmp && meEmp.active) startLive(); }
 
 /* ----- Leaflet (الخريطة) ----- */
-// الخريطة صغيرة، وتكبر لما تدوس عليها أو على زرار التكبير
-function bindMapToggle(wrapId, getMap) {
-  const w = $(wrapId); if (!w) return; const m = w.querySelector('.map'), b = w.querySelector('.mapbtn');
-  const set = big => { m.classList.toggle('mini', !big); m.classList.toggle('big', big); b.innerHTML = big ? `${ic('x', 18)}<span>تصغير</span>` : `${ic('plus', 18)}<span>تكبير</span>`; setTimeout(() => { const mp = getMap(); mp && mp.invalidateSize && mp.invalidateSize(); }, 380); if (big) w.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); };
-  b.onclick = e => { e.stopPropagation(); set(m.classList.contains('mini')); };
-  m.addEventListener('click', () => { if (m.classList.contains('mini')) set(true); }, true);
-}
 let leafletP = null;
 function loadLeaflet() {
   if (window.L) return Promise.resolve(window.L);
@@ -946,14 +938,14 @@ function renderMap() {
   const v = $('vMap');
   v.innerHTML = `<section class="card reveal">
     <h2>الخريطة المباشرة <span class="muted small" id="mpCount" style="font-family:var(--f-body)"></span></h2>
-    <div class="mapwrap" id="ownWrap"><div class="map mini" id="ownMap"></div><button class="mapbtn" id="ownExp" type="button" aria-label="تكبير الخريطة">${ic("plus", 18)}<span>تكبير</span></button></div>
+    <div class="map tall" id="ownMap"></div>
     <label class="switch"><input type="checkbox" id="mpEvery" ${liveEvery() ? 'checked' : ''}><span>إشعار مع كل تحديث في اللايف (مرة كل دقيقة بحد أقصى لكل موظف)</span></label>
     <div class="lvhead"><b>اللي شغّالين لايف لوكيشن</b><span class="muted small">اضغط على أي اسم لتفاصيل مكانه والاتجاهات</span></div>
     <div id="mpList" class="lvtable"></div>
   </section>`;
   $('mpEvery').onchange = e => { try { localStorage.setItem('sh-live-every', e.target.checked ? '1' : '0'); } catch (x) { } askNotify(); };
   $('mpList').onclick = e => { const b = e.target.closest('[data-focus]'); if (!b) return; openLiveSheet(b.dataset.focus); };
-  ownMarks = {}; ownLines = {}; ownMap = null; bindMapToggle('ownWrap', () => ownMap);
+  ownMarks = {}; ownLines = {}; ownMap = null;
   loadLeaflet().then(L => {
     if (view !== 'vMap') return;
     ownMap = L.map('ownMap').setView([24.7136, 46.6753], 11);
