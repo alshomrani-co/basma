@@ -1,7 +1,7 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=9';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=10';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 /* ========== Firebase ========== */
 const app = initializeApp(firebaseConfig);
@@ -60,6 +60,10 @@ const I = {
   trash: "M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3",
   plus: "M12 5v14M5 12h14",
   mic: "M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0zM5 10a7 7 0 0 0 14 0M8 21h8M12 17v4",
+  backup: "M4 6c0 1.66 3.58 3 8 3s8-1.34 8-3-3.58-3-8-3-8 1.34-8 3M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6",
+  restart: "M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4",
+  phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
+  edit: "M4 20h4L18.5 9.5a2.83 2.83 0 0 0-4-4L4 16v4M13.5 6.5l4 4",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -68,7 +72,7 @@ const I = {
   pause: "M6 5h4v14H6zM14 5h4v14h-4z"
 };
 const ic = (n, s = 20, w = 1.8) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${I[n]}"/></svg>`;
-const MI = { face: ['face', 'الوجه'], finger: ['finger', 'البصمة'] };
+const MI = { face: ['face', 'الوجه'], finger: ['finger', 'البصمة'], manual: ['gear', 'المدير (يدوي)'] };
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 
@@ -151,6 +155,8 @@ function docToRec(d) {
     const k = FMAP[f], v = d[k];
     if (v && v.toMillis) { r[f] = riyMin(v.toMillis()); r.m[f] = d[k + '_m']; if (d[k + '_ph']) r.ph[f] = d[k + '_ph']; if (d[k + '_geo']) r.geo[f] = d[k + '_geo']; }
   }
+  if (d.late_note && d.late_note.text) r.note = d.late_note.text;
+  if (d.late_note2 && d.late_note2.text) r.note2 = d.late_note2.text;
   return (r.in == null && r.in2 == null && r.out == null) ? null : r;
 }
 function empFromDoc(s) {
@@ -386,11 +392,12 @@ function renderPass() {
 function renderMsg(title, body) { show('vMsg'); $('msgTitle').textContent = title; $('msgBody').textContent = body; document.querySelector('#vMsg .loader').hidden = !title.startsWith('جارٍ'); }
 
 /* ----- welcome ----- */
+const DHIKR = `<span class="dk-ic">✦</span><span>اذكر الله · وصلِّ على سيدنا محمد</span><span class="saw">ﷺ</span>`;
 function welcome(name) {
   const w = $('welcome'); if (!w) return;
   $('wName').textContent = name;
   w.hidden = false; requestAnimationFrame(() => w.classList.add('on'));
-  setTimeout(() => { w.classList.remove('on'); setTimeout(() => w.hidden = true, 600); }, RM ? 1200 : 2600);
+  setTimeout(() => { w.classList.remove('on'); setTimeout(() => w.hidden = true, 600); }, RM ? 1800 : 3600);
 }
 
 /* ----- shift band ----- */
@@ -467,7 +474,9 @@ function mountProfile(root, emp, withPhotos) {
     let h = `<b>${dFmt.format(d)}</b> · <span class="chip c-${s}">${STL[s] || '—'}</span>`;
     if (r) {
       const fs = P.off ? ALL.filter(f => r[f] != null) : P.fields;
-      h += `<div class="muted small" style="margin-top:4px">` + fs.map(f => `${FL[f]} ${tm(r[f])}`).join(' · ') + ` · صافي ${dur(worked(r, st.sel))}</div>`;
+      h += `<div class="muted small" style="margin-top:4px">` + fs.map(f => `${FL[f]} ${tm(r[f])}${r.m[f] === 'manual' ? ' (يدوي)' : ''}`).join(' · ') + ` · صافي ${dur(worked(r, st.sel))}</div>`;
+      if (r.note) h += `<div class="lnotebox">${ic('alert', 14)} سبب تأخير الحضور: ${esc(r.note)}</div>`;
+      if (r.note2) h += `<div class="lnotebox">${ic('alert', 14)} سبب تأخير العودة: ${esc(r.note2)}</div>`;
       if (withPhotos) {
         const ph = ALL.filter(f => r.ph[f]);
         if (ph.length) h += `<div class="photos">` + ph.map(f => `<figure><img src="${r.ph[f]}" alt="صورة ${FL[f]}"><figcaption>${FL[f]}</figcaption></figure>`).join('') + `</div>`;
@@ -517,6 +526,7 @@ function renderEmp() {
   v.innerHTML = `<div class="grid two">
    <section class="card reveal">
     <div class="greet" id="greet"></div>
+    <div class="dhikr">${DHIKR}</div>
     <div class="muted small" style="margin-bottom:6px">${emp.dept ? 'قسم ' + esc(emp.dept) + ' · ' : ''}${esc(COMPANY)}</div>
     <div class="phase" id="phase"></div>
     ${bandHTML(P)}
@@ -536,6 +546,7 @@ function renderEmp() {
      <div class="devline" id="devline"></div>
      <div class="devline">${ic('pin', 13)} ${esc(geoRuleText(emp))}</div>
      <button class="livecta ${liveOn ? 'on' : ''}" id="liveCta" type="button"><span class="lc-ic">${ic('live', 22)}</span><span class="lc-tx"><b>${liveOn ? 'اللايف لوكيشن شغّال' : 'ابدأ لايف لوكيشن'}</b><small>${liveOn ? 'المالك شايف مكانك الآن · اضغط للتفاصيل' : 'شارك مكانك المباشر مع المالك'}</small></span>${ic('left', 18)}</button>
+     <div id="lateSlot">${lateCardHTML()}</div>
      <div class="slots" id="slots" style="grid-template-columns:repeat(${P.off ? 4 : P.fields.length},minmax(0,1fr))"></div>
      <div class="timer"><span class="muted small">مدة العمل اليوم</span><b class="num" id="wt">٠٠:٠٠:٠٠</b></div>
      ${notifCta()}
@@ -546,9 +557,11 @@ function renderEmp() {
     <div id="myProf"></div>
    </section></div>`;
   mountProfile($('myProf'), emp, false);
-  bindScan(); bindNotifCta(); updateEmpLive(true); updateBands();
+  bindScan(); bindNotifCta(); updateEmpLive(true); updateBands(); bindLateCard();
   $('liveCta').onclick = () => { vibrate(15); openTab('vLive'); if (!liveOn) startLive(); };
 }
+function bindLateCard() { const c = $('lateCard'); if (c) c.onclick = () => { const L = lateInfo(); if (L) openLateSheet(L.f, L.by); }; }
+function paintLateSlot() { const sl = $('lateSlot'); if (!sl) return; const h = lateCardHTML(); if (sl.dataset.h !== h) { sl.dataset.h = h; sl.innerHTML = h; bindLateCard(); } }
 function notifCta() {
   const p = ('Notification' in window) ? Notification.permission : 'unsupported';
   if (p === 'default') return `<button class="btn ghost" id="notifBtn" style="max-width:380px;width:100%">${ic('bell', 16)} فعّل الإشعارات عشان توصلك التنبيهات</button>`;
@@ -561,7 +574,7 @@ function updateEmpLive(full) {
   if (view !== 'vEmp' || !meEmp) return;
   const emp = meEmp, r = myRec(), n = nowMin(), key = todayKey(), P = todayPlan();
   const hr = Math.floor(n / 60);
-  const g = $('greet'); if (!g) return;
+  const g = $('greet'); if (!g) return; paintLateSlot();
   g.textContent = (hr < 12 ? 'صباح الخير' : 'مساء الخير') + '، ' + emp.name.split(' ')[0];
   const nf0 = nextField(r, P);
   let txt, col; const left = x => dur(x - n); const G = grace();
@@ -642,8 +655,44 @@ async function doPunch(method, thumb, label) {
     const P = todayPlan();
     $('hint').textContent = `تم ${FL[res.f]} ${tm(res.t)}` + (res.late ? ' · تأخير ' + dur(res.t - (res.f === 'in' ? P.start : P.b2)) : '');
     toast(res.late ? 'warn' : 'ok', `${FL[res.f]} ${tm(res.t)}`, `تم التحقق ب${MI[method][1]} · وصل إشعار للمالك`, 'تسجيلك');
-    setTimeout(() => { scan.classList.remove('ok'); prog.style.strokeDashoffset = 100; $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; busy = false; updateEmpLive(true); const sl = document.querySelector(`[data-slot="${res.f}"]`); sl && sl.classList.add('flash'); }, 1700);
+    setTimeout(() => { scan.classList.remove('ok'); prog.style.strokeDashoffset = 100; $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; busy = false; updateEmpLive(true); const sl = document.querySelector(`[data-slot="${res.f}"]`); sl && sl.classList.add('flash'); if (res.late) openLateSheet(res.f, res.t - (res.f === 'in' ? P.start : P.b2)); }, 1700);
   } else { busy = false; runFail(res.msg); setTimeout(() => { $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; updateEmpLive(true); }, 800); }
+}
+/* ----- سبب التأخير: يكتبه الموظف، أو يكلّم المدير، أو يكتب في الشات ----- */
+function lateInfo() {
+  const r = myRec(), P = todayPlan(), G = grace(); if (!r || P.off) return null;
+  if (r.in != null && r.in > P.start + G && !r.note) return { f: 'in', by: r.in - P.start };
+  if (P.two && r.in2 != null && r.in2 > P.b2 + G && !r.note2) return { f: 'in2', by: r.in2 - P.b2 };
+  return null;
+}
+function lateCardHTML() {
+  const L = lateInfo(); if (!L) return '';
+  return `<button type="button" class="latecard" id="lateCard">${ic('alert', 20)}<span><b>اتأخرت ${dur(L.by)} في ${FL[L.f]}</b><small>اكتب سبب التأخير أو كلّم المدير</small></span>${ic('left', 16)}</button>`;
+}
+function openLateSheet(f, by) {
+  const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'), phone = String(settings.phone || '').replace(/[^\d+]/g, '');
+  sheetEmp = null; liveSheetId = null;
+  inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--warn-soft,#fff3e0);color:var(--warn)">${ic('clock', 22)}</div><b>اتأخرت ${dur(by)} <span class="muted small">${FL[f]}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    <p class="muted small" style="margin:0 0 12px">اكتب سبب التأخير وهيوصل للمدير، أو كلّمه مباشرة، أو اكتب في الشات.</p>
+    <div class="fl"><label for="lateTx">سبب التأخير</label><textarea id="lateTx" rows="3" maxlength="300" placeholder="مثلاً: زحمة على طريق الملك فهد"></textarea></div>
+    <div class="quickr">${['زحمة طريق', 'ظرف عائلي', 'موعد طبي', 'كنت في موقع عمل'].map(x => `<button type="button" class="qr">${x}</button>`).join('')}</div>
+    <button class="btn primary" id="lateSend" type="button" style="width:100%;margin-top:12px">${ic('send', 16)} إرسال السبب للمدير</button>
+    <div class="row-btns" style="margin-top:10px">
+     ${phone ? `<a class="btn ghost" href="tel:${phone}">${ic('phone', 16)} اتصل بالمدير</a><a class="btn ghost" href="https://wa.me/${phone.replace(/^\+/, '').replace(/^0/, '966')}" target="_blank" rel="noopener">${ic('chat', 16)} واتساب المدير</a>` : ''}
+     <button class="btn ghost" id="lateChat" type="button">${ic('chat', 16)} اكتب في الشات</button>
+    </div>
+    <div class="err" id="lateErr"></div>`;
+  sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+  const tx = $('lateTx');
+  inner.querySelectorAll('.qr').forEach(b => b.onclick = () => { tx.value = b.textContent; tx.focus(); });
+  $('lateSend').onclick = async () => {
+    const t = tx.value.trim(); if (t.length < 2) { $('lateErr').textContent = 'اكتب السبب الأول'; tx.focus(); return; }
+    try { await updateDoc(doc(db, 'days', me.uid + '_' + todayIdx()), { [f === 'in' ? 'late_note' : 'late_note2']: { text: t, at: serverTimestamp() } }); closeSheet(); toast('ok', 'وصل سبب التأخير للمدير', t, 'تسجيلك'); }
+    catch (e) { $('lateErr').textContent = errWhy(e); }
+  };
+  $('lateChat').onclick = () => { const t = tx.value.trim(); closeSheet(); openTab('vChat'); setTimeout(() => { const ta = $('chatIn'); if (ta) { ta.value = `اتأخرت ${dur(by)} عن ${FL[f]}` + (t ? ' بسبب ' + t : ' بسبب '); ta.oninput(); ta.focus(); } }, 350); };
+  setTimeout(() => tx.focus(), 450);
 }
 function runFail(msg) {
   const scan = $('scan'); if (!scan) return; scan.classList.remove('busy'); scan.classList.add('fail'); vibrate([60, 40, 60]);
@@ -1263,7 +1312,7 @@ function renderOwner() {
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
-      const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => FL[f] + ' ' + tm(r[f])).join(' · ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '');
+      const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => FL[f] + ' ' + tm(r[f])).join(' · ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '');
       const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop(); const lv = fresh(lives[e.id]);
       return `<button class="emp" data-emp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span></div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
     }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : isViewer ? 'لا يوجد موظفون بعد' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
@@ -1344,6 +1393,7 @@ function openSheet(id) {
   inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.num)}</span></b>
     <button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
     <div class="shgrid">
+     <div class="fl"><label for="shName">الاسم</label><input id="shName" value="${esc(emp.name)}" maxlength="60"></div>
      <div class="fl"><label for="shDept">القسم</label><select id="shDept">${DEPTS.map(d => `<option ${emp.dept === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
      ${lv && lv.lat != null ? `<div class="fl"><label>الموقع المباشر</label><button class="btn ghost" id="shLive" type="button">${ic('map', 14)} ${fresh(lv) ? 'مباشر الآن' : 'آخر مكان'} · ${ago(lv.atMs)}</button></div>` : ''}
     </div>
@@ -1354,8 +1404,16 @@ function openSheet(id) {
      <label class="radio"><input type="radio" name="gm" value="any" ${g.mode === 'any' ? 'checked' : ''}><span>من أي مكان</span></label>
      <button class="btn primary" id="shGeoSave" type="button" style="margin-top:10px">حفظ الصلاحية</button>
     </div>
+    <div class="card manbox" style="padding:14px;margin:0 0 12px">
+     <b class="gt">${ic('edit', 16)} تحضير يدوي وتعديل البصمات</b>
+     <p class="muted small" style="margin:4px 0 10px">لو الموظف غايب أو نسي يبصم، حدد اليوم واكتب الأوقات. سيب الخانة فاضية عشان تمسحها.</p>
+     <div class="fl"><label for="mDay">اليوم</label><input id="mDay" type="date" value="${todayKey()}" max="${todayKey()}"></div>
+     <div class="mtimes" id="mTimes"></div>
+     <div class="row-btns" style="margin-top:10px"><button class="btn primary" id="mSave" type="button">${ic('check', 16)} حفظ الأوقات</button><button class="btn ghost" id="mNow" type="button">${ic('clock', 16)} تحضير الآن</button></div>
+    </div>
     <div class="row-btns" style="margin:-4px 0 14px">
       <button class="btn ghost" id="shActive">${emp.active ? 'إيقاف الحساب' : 'تفعيل الحساب'}</button>
+      <button class="btn ghost danger-t" id="shDel">${ic('trash', 14)} حذف الموظف</button>
       ${emp.cred ? `<button class="btn ghost" id="shDev">${ic('device', 14)} إلغاء ربط الجهاز</button>` : `<span class="muted small" style="align-self:center">${ic('device', 13)} لم يربط جهازاً بعد</span>`}
     </div>
     <div class="err" id="shErr"></div>
@@ -1375,6 +1433,26 @@ function openSheet(id) {
   };
   const sl = $('shLive'); if (sl) sl.onclick = () => { closeSheet(); renderMap(); setTimeout(() => { const l = lives[emp.id]; if (ownMap && l) ownMap.setView([l.lat, l.lng], 17); }, 900); };
   $('shActive').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { active: !emp.active }); closeSheet(); toast('ok', emp.active ? 'تم إيقاف حساب ' + emp.name : 'تم تفعيل حساب ' + emp.name, '', 'الإدارة'); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
+  $('shName').onchange = async e => { const nm = e.target.value.trim(); if (nm.length < 2) return; try { await updateDoc(doc(db, 'employees', emp.id), { name: nm }); toast('ok', 'تم تعديل الاسم', nm, 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحفظ'; } };
+  // تحضير يدوي
+  const paintTimes = () => {
+    const k = $('mDay').value || todayKey(), P = planKey(k), r = getRec(emp, k), fs = P.off ? ALL : P.fields;
+    $('mTimes').innerHTML = (P.off ? '<p class="muted small" style="grid-column:1/-1;margin:0">اليوم ده إجازة، وتقدر برضه تسجّل أوقات.</p>' : '') + fs.map(f => `<div class="fl"><label for="mt_${f}">${FL[f]}</label><input type="time" id="mt_${f}" data-f="${f}" value="${r && r[f] != null ? hhmm(r[f]) : ''}"></div>`).join('');
+  };
+  paintTimes(); $('mDay').onchange = paintTimes;
+  const saveTimes = async (vals) => {
+    const k = $('mDay').value || todayKey(); if (k > todayKey()) { $('shErr').textContent = 'مينفعش تحضّر في يوم لسه ماجاش'; return; }
+    const idx = idxOfKey(k), data = { uid: emp.id, day: idx };
+    Object.entries(vals).forEach(([f, v]) => { const pk = FMAP[f]; if (v == null) { data[pk] = deleteField(); data[pk + '_m'] = deleteField(); } else { data[pk] = Timestamp.fromMillis(idx * DAY - OFF + v * 60000); data[pk + '_m'] = 'manual'; } });
+    try { await setDoc(doc(db, 'days', emp.id + '_' + idx), data, { merge: true }); $('shErr').textContent = ''; toast('ok', 'تم حفظ أوقات ' + emp.name, dFmt.format(fromKey(k)), 'الإدارة'); }
+    catch (x) { $('shErr').textContent = errWhy(x); }
+  };
+  $('mSave').onclick = () => { const vals = {}; let bad = false; $('mTimes').querySelectorAll('input[type=time]').forEach(i => { const v = i.value ? fromHHMM(i.value) : null; if (i.value && v == null) bad = true; vals[i.dataset.f] = v; }); if (bad) { $('shErr').textContent = 'وقت غير صحيح'; return; } saveTimes(vals); };
+  $('mNow').onclick = () => { $('mDay').value = todayKey(); const r = getRec(emp, todayKey()), f = nextField(r, todayPlan()) || 'in'; saveTimes({ [f]: Math.floor(nowMin()) }).then(paintTimes); };
+  $('shDel').onclick = async () => {
+    const b = $('shDel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('trash', 14)} اضغط تاني للتأكيد`; setTimeout(() => { if (b.isConnected) { b.dataset.sure = ''; b.innerHTML = `${ic('trash', 14)} حذف الموظف`; } }, 4000); return; }
+    try { await deleteDoc(doc(db, 'employees', emp.id)); deleteDoc(doc(db, 'live', emp.id)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف ' + emp.name, 'سجلات حضوره القديمة محفوظة في النسخة الاحتياطية', 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحذف'; }
+  };
   const dv = $('shDev'); if (dv) dv.onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { cred: null }); toast('ok', 'تم إلغاء ربط جهاز ' + emp.name, 'أول بصمة قادمة ستربط جهازه الجديد', 'الإدارة'); closeSheet(); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
 }
 function closeSheet() {
@@ -1415,6 +1493,21 @@ function renderSet() {
    <button class="btn primary" id="schSave" type="button" style="margin-top:14px;width:100%">حفظ مواعيد العمل</button>
    <div class="err" id="schErr"></div>
   </section>
+  <section class="card reveal" style="margin-top:16px;animation-delay:.06s">
+   <h2>رقم جوال المدير</h2>
+   <p class="muted small" style="margin:0 0 10px">بيظهر للموظف المتأخر عشان يتصل أو يبعت واتساب.</p>
+   <form class="form inl" id="phForm" novalidate><div class="fl" style="flex:1"><label for="phIn">رقم الجوال</label><input id="phIn" dir="ltr" inputmode="tel" placeholder="05xxxxxxxx" value="${esc(settings.phone || '')}"></div><button class="btn primary" type="submit">حفظ</button></form>
+  </section>
+  <section class="card reveal" style="margin-top:16px;animation-delay:.07s">
+   <h2>${ic('backup', 18)} النسخ الاحتياطي</h2>
+   <p class="muted small" style="margin:0 0 10px">نزّل نسخة من كل البيانات على جوالك أو جهازك. نزّل نسخة دايماً قبل أي «بدء من جديد».</p>
+   <div class="row-btns"><button class="btn primary" id="bkJson" type="button">${ic('download', 16)} نسخة احتياطية كاملة</button><button class="btn ghost" id="bkCsv" type="button">${ic('file', 16)} كشف الحضور (Excel)</button></div>
+  </section>
+  <section class="card reveal dangerzone" style="margin-top:16px;animation-delay:.075s">
+   <h2>${ic('restart', 18)} بدء من جديد</h2>
+   <p class="muted small" style="margin:0 0 10px">بيمسح سجلات الحضور ويبدأ العدّ لكل الموظفين من النهارده (مثلاً مع إطلاق الحملة). الموظفين وحساباتهم والإعدادات بتفضل زي ما هي. محتاج كلمة سر المدير.</p>
+   <button class="btn danger" id="rsOpen" type="button">${ic('restart', 16)} ريستارت التطبيق</button>
+  </section>
   <section class="card reveal" style="margin-top:16px;animation-delay:.08s">
    <h2>حسابات المتابعة <span class="muted small" style="font-family:var(--f-body)">مشاهدة فقط</span></h2>
    <p class="muted small" style="margin:0 0 10px">حساب يشوف الحضور والانصراف: مين جه بدري ومين اتأخر، والخريطة، والشات، من غير ما يقدر يعدّل أي حاجة.</p>
@@ -1441,6 +1534,10 @@ function renderSet() {
    </form>
   </section>`;
   bindViewers();
+  $('phForm').onsubmit = async e => { e.preventDefault(); const ph = toEn($('phIn').value.trim()).replace(/[^\d+]/g, ''); try { await setDoc(doc(db, 'settings', 'main'), { phone: ph }, { merge: true }); toast('ok', ph ? 'تم حفظ رقم المدير' : 'تم مسح رقم المدير', ph, 'الإعدادات'); } catch (x) { toast('bad', 'تعذّر الحفظ', errWhy(x), 'الإعدادات'); } };
+  $('bkJson').onclick = () => runBackup(true);
+  $('bkCsv').onclick = () => exportCsv();
+  $('rsOpen').onclick = openReset;
   // grace
   $('gForm').onsubmit = async e => {
     e.preventDefault(); const g = parseInt(toEn($('gMin').value), 10);
@@ -1537,6 +1634,71 @@ function bindViewers() {
   };
 }
 
+/* ----- النسخ الاحتياطي والبدء من جديد ----- */
+const plain = v => v && typeof v.toMillis === 'function' ? new Date(v.toMillis()).toISOString() : Array.isArray(v) ? v.map(plain) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)])) : v;
+function saveBlob(blob, name) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+async function dumpColl(c) { const snap = await getDocs(collection(db, c)); const o = {}; snap.docs.forEach(d => o[d.id] = plain(d.data())); return o; }
+async function runBackup(withToast) {
+  if (withToast) toast('info', 'جارٍ تجهيز النسخة الاحتياطية…', '', 'الإعدادات');
+  const out = { app: 'بصمة الشمراني', made: new Date().toISOString(), data: {} };
+  for (const c of ['settings', 'employees', 'viewers', 'days', 'chat']) out.data[c] = await dumpColl(c);
+  const n = Object.keys(out.data.days).length;
+  saveBlob(new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' }), `shamrani-backup-${todayKey()}.json`);
+  if (withToast) toast('ok', 'تم تنزيل النسخة الاحتياطية', ar(Object.keys(out.data.employees).length) + ' موظف · ' + ar(n) + ' يوم حضور', 'الإعدادات');
+  return out;
+}
+async function exportCsv() {
+  try {
+    const days = await dumpColl('days'), rows = [['الموظف', 'القسم', 'اسم المستخدم', 'التاريخ', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'الحالة', 'سبب التأخير']];
+    Object.values(days).sort((a, b) => a.day - b.day).forEach(d => {
+      const e = empById(d.uid) || { name: d.uid, dept: '', num: '' }, k = keyOfIdx(d.day), P = planKey(k);
+      const t = f => d[FMAP[f]] ? tm(riyMin(Date.parse(d[FMAP[f]]))) : '';
+      const inM = d.p1 ? riyMin(Date.parse(d.p1)) : null, late = inM != null && !P.off && inM > P.start + grace();
+      rows.push([e.name, e.dept, e.num, k, t('in'), t('out1'), t('in2'), t('out'), inM == null ? 'غائب' : late ? 'متأخر' : inM < (P.start || 0) ? 'بدري' : 'في الموعد', [d.late_note && d.late_note.text, d.late_note2 && d.late_note2.text].filter(Boolean).join(' / ')]);
+    });
+    const csv = '\ufeff' + rows.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `shamrani-attendance-${todayKey()}.csv`);
+    toast('ok', 'تم تنزيل كشف الحضور', ar(rows.length - 1) + ' سجل · يفتح على Excel', 'الإعدادات');
+  } catch (x) { toast('bad', 'تعذّر التنزيل', errWhy(x), 'الإعدادات'); }
+}
+function openReset() {
+  const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
+  inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--bad);color:#fff">${ic('restart', 22)}</div><b>ريستارت التطبيق <span class="muted small">بدء من جديد</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    <div class="rswarn">${ic('alert', 18)}<span>الخطوة دي مش بترجع. هيتنزّل نسخة احتياطية تلقائياً قبل المسح.</span></div>
+    <b class="gt" style="display:block;margin:12px 0 6px">هيتمسح:</b>
+    <label class="chk"><input type="checkbox" checked disabled><span>كل سجلات الحضور والانصراف</span></label>
+    <label class="chk"><input type="checkbox" id="rsChat"><span>الشات والصور والملفات والرسايل الصوتية</span></label>
+    <label class="chk"><input type="checkbox" id="rsLive" checked><span>المواقع المباشرة ومسارات الحركة</span></label>
+    <b class="gt" style="display:block;margin:12px 0 6px">هيفضل زي ما هو:</b>
+    <p class="muted small" style="margin:0">الموظفين وحساباتهم وكلمات السر، الأقسام، المواعيد، فترة السماح، مواقع العمل، حسابات المتابعة. والعدّ لكل موظف هيبدأ من النهارده.</p>
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="rsAgree"><span><b>موافق</b>، أنا عارف إن السجلات هتتمسح</span></label>
+    <div class="fl" style="margin-top:10px"><label for="rsPass">كلمة سر المدير</label><input id="rsPass" type="password" autocomplete="current-password" placeholder="اكتب كلمة السر للتأكيد"></div>
+    <button class="btn danger" id="rsGo" type="button" style="width:100%;margin-top:12px" disabled>${ic('restart', 16)} تأكيد الريستارت</button>
+    <div class="err" id="rsErr"></div>`;
+  sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+  const go = $('rsGo'), chk = () => { go.disabled = !($('rsAgree').checked && $('rsPass').value.length >= 6); $('rsErr').textContent = ''; };
+  $('rsAgree').onchange = chk; $('rsPass').oninput = chk;
+  go.onclick = async () => {
+    if (go.dataset.sure !== '1') { go.dataset.sure = '1'; go.innerHTML = `${ic('alert', 16)} متأكد؟ اضغط تاني للمسح النهائي`; return; }
+    go.disabled = true; go.textContent = 'جارٍ التحقق من كلمة السر…';
+    try { await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, $('rsPass').value)); }
+    catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; $('rsErr').textContent = 'كلمة السر غلط'; return; }
+    try {
+      go.textContent = 'جارٍ تنزيل النسخة الاحتياطية…'; await runBackup(false);
+      const cols = ['days'].concat($('rsLive').checked ? ['live'] : [], $('rsChat').checked ? ['chat', 'media', 'reads'] : []);
+      let n = 0;
+      for (const c of cols) {
+        const snap = await getDocs(collection(db, c));
+        for (let i = 0; i < snap.docs.length; i += 400) { const b = writeBatch(db); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); n += Math.min(400, snap.docs.length - i); go.textContent = 'جارٍ المسح… ' + ar(n); }
+      }
+      const b = writeBatch(db); emps.forEach(e => b.update(doc(db, 'employees', e.id), { start: todayKey() })); await b.commit();
+      await setDoc(doc(db, 'settings', 'main'), { resetAt: serverTimestamp() }, { merge: true });
+      recs = {}; closeSheet(); toast('ok', 'تم الريستارت', 'كل الموظفين بيبدأوا من النهارده · النسخة الاحتياطية اتنزّلت', 'الإعدادات'); refresh();
+    } catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; $('rsErr').textContent = 'حصلت مشكلة: ' + errWhy(x); }
+  };
+}
+
 /* ========== data wiring ========== */
 function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; }
 function onDays(snap) {
@@ -1553,6 +1715,7 @@ function onDays(snap) {
     changes.forEach(c => {
       if (c.type === 'removed') return; const d = c.doc.data(); if (d.day !== todayIdx()) return;
       const now = recs[d.uid][keyOfIdx(d.day)], was = prev[c.doc.id], e = empById(d.uid); if (!now || !e) return;
+      [['note', 'الحضور'], ['note2', 'العودة']].forEach(([k, lb]) => { if (now[k] && (!was || was[k] !== now[k])) alertBoth('warn', `سبب تأخير ${e.name}`, `${lb}: ${now[k]}`, 'إشعار للمالك', 'late-' + d.uid + k, 'vOwn'); });
       ALL.forEach(f => {
         if (now[f] != null && (!was || was[f] == null) && now[f] >= nowMin() - 10) {
           const late = (f === 'in' && !P.off && now.in > P.start + G) || (f === 'in2' && P.two && now.in2 > P.b2 + G);

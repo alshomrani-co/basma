@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=9">
+<link rel="manifest" href="manifest.json?v=10">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -564,6 +564,34 @@ em.lateby{font-style:normal;color:var(--warn);font-weight:600}
 .instbar b{display:block;font-size:14px}
 .instbar span{display:block;font-size:12px;opacity:.85;line-height:1.6;margin-top:2px}
 .instbar button{color:var(--bg);opacity:.8;flex:none}
+
+/* ذكر */
+.dhikr{display:inline-flex;align-items:center;gap:8px;letter-spacing:0;word-spacing:normal;font-family:var(--f-body);margin:6px 0 8px;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#0f6b4f,#1f8a70);color:#fff;font-weight:600;font-size:14.5px;box-shadow:0 6px 18px rgba(15,107,79,.3);position:relative;overflow:hidden}
+.dhikr::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(120%);animation:dkshine 3.2s ease-in-out infinite}
+.dhikr .dk-ic{color:#f5d77a;font-size:13px;animation:dkpulse 2s ease-in-out infinite}
+.dhikr.big{font-size:16px;padding:10px 18px;margin:10px auto 12px}
+@keyframes dkshine{0%,55%{transform:translateX(120%)}100%{transform:translateX(-120%)}}
+@keyframes dkpulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.7}}
+/* تأخير */
+.latecard{display:flex;align-items:center;gap:12px;width:100%;max-width:380px;margin:12px auto 0;padding:12px 14px;border-radius:14px;border:1.5px solid var(--warn);background:rgba(230,140,20,.09);color:var(--fg);text-align:right;animation:thglow 1.8s ease-in-out infinite}
+.latecard>svg:first-child{color:var(--warn);flex:none}
+.latecard span{flex:1;display:flex;flex-direction:column}
+.latecard b{font-size:14px}.latecard small{font-size:12px;color:var(--muted)}
+.quickr{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.qr{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;color:var(--fg);background:var(--surface2)}
+em.lnote{font-style:normal;color:var(--muted)}
+.lnotebox{display:flex;gap:6px;align-items:flex-start;margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(230,140,20,.1);color:var(--fg);font-size:13px}
+.lnotebox svg{color:var(--warn);flex:none;margin-top:2px}
+/* تحضير يدوي */
+.mtimes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.mtimes input[type=time]{direction:ltr;text-align:center}
+.btn.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.danger:disabled{opacity:.45}
+.btn.danger-t{color:var(--bad)}
+.dangerzone{border-color:rgba(215,38,43,.35)}
+.rswarn{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;background:rgba(215,38,43,.1);color:var(--bad);font-size:13px;font-weight:600}
+.rswarn svg{flex:none}
+.sheet .chk{display:flex;gap:8px;align-items:center;padding:5px 0;font-size:14px}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -574,7 +602,7 @@ em.lateby{font-style:normal;color:var(--warn);font-weight:600}
   <div class="sub">مرحباً بكم في نظام الحضور والانصراف</div>
 </div>
 
-<div class="welcome" id="welcome" hidden aria-live="polite"><div class="wc"><img src="mark.png" alt=""><small>مرحباً بك</small><b id="wName"></b><span>في شركة سعد مفرح الشمراني للاستشارات الهندسية</span></div></div>
+<div class="welcome" id="welcome" hidden aria-live="polite"><div class="wc"><img src="mark.png" alt=""><b id="wName"></b><div class="dhikr big"><span class="dk-ic">✦</span><span>اذكر الله · وصلِّ على سيدنا محمد</span><span class="saw">ﷺ</span></div><span>شركة سعد مفرح الشمراني للاستشارات الهندسية</span></div></div>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
@@ -629,6 +657,6 @@ em.lateby{font-style:normal;color:var(--warn);font-weight:600}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=9"></script>
+<script type="module" src="app.js?v=10"></script>
 </body>
 </html>

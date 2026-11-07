@@ -1,9 +1,9 @@
-const CACHE = 'shamrani-basma-v9';
+const CACHE = 'shamrani-basma-v10';
 const SHELL = [
   './',
   './index.html',
-  './app.js?v=9',
-  './config.js?v=9',
+  './app.js?v=10',
+  './config.js?v=10',
   './manifest.json',
   './logo-180.png',
   './logo-192.png',
