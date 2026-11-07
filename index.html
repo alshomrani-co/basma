@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=10">
+<link rel="manifest" href="manifest.json?v=11">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -566,12 +566,40 @@ em.lateby{font-style:normal;color:var(--warn);font-weight:600}
 .instbar button{color:var(--bg);opacity:.8;flex:none}
 
 /* ذكر */
-.dhikr{display:inline-flex;align-items:center;gap:8px;letter-spacing:0;word-spacing:normal;font-family:var(--f-body);margin:6px 0 8px;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#0f6b4f,#1f8a70);color:#fff;font-weight:600;font-size:14.5px;box-shadow:0 6px 18px rgba(15,107,79,.3);position:relative;overflow:hidden}
+.dhikr{display:inline-flex;align-items:center;gap:8px;letter-spacing:0;word-spacing:normal;font-family:var(--f-body);margin:6px 0 8px;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,var(--dk-bg1,#0f6b4f),var(--dk-bg2,#1f8a70));color:var(--dk-fg,#fff)!important;font-weight:600;font-size:14.5px;box-shadow:0 6px 18px rgba(15,107,79,.3);position:relative;overflow:hidden;max-width:100%}
+.dhikr span,.welcome .dhikr span{color:var(--dk-fg,#fff)!important;font-size:inherit!important;position:relative;z-index:1}
+.dhikr .dk-ic,.welcome .dhikr .dk-ic{color:var(--dk-star,#f5d77a)!important;font-size:.9em!important;animation:dkpulse 2s ease-in-out infinite}
 .dhikr::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(120%);animation:dkshine 3.2s ease-in-out infinite}
-.dhikr .dk-ic{color:#f5d77a;font-size:13px;animation:dkpulse 2s ease-in-out infinite}
-.dhikr.big{font-size:16px;padding:10px 18px;margin:10px auto 12px}
+[data-dk-shine="0"] .dhikr::after{display:none}
+.dhikr.big{font-size:15px;padding:10px 16px;margin:10px auto 12px}
+.dhikr .dk-t{text-align:center;line-height:1.6}
+[data-dk="s"] .dhikr{font-size:12.5px;padding:6px 12px}[data-dk="s"] .dhikr.big{font-size:14px}
+[data-dk="l"] .dhikr{font-size:17px;padding:10px 18px}[data-dk="l"] .dhikr.big{font-size:19px;padding:12px 20px}
+.welcome b#wName{color:var(--wel-name,var(--gold))}
 @keyframes dkshine{0%,55%{transform:translateX(120%)}100%{transform:translateX(-120%)}}
 @keyframes dkpulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.7}}
+/* إعلان */
+.notice{display:flex;gap:10px;align-items:flex-start;margin:10px 0;padding:12px 14px;border-radius:14px;background:var(--nt-bg,var(--fg));color:var(--nt-fg,var(--bg));font-size:14px;line-height:1.7;text-align:right}
+.notice svg{flex:none;margin-top:3px}
+/* صفحة التخصيص */
+.uirow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.uirow:last-child{border-bottom:0}
+.uirow label{font-size:14px;flex:1}
+.uicol{display:flex;align-items:center;gap:8px}
+.uicol input[type=color]{width:44px;height:36px;padding:0;border:1px solid var(--line);border-radius:10px;background:none;cursor:pointer}
+.uicol input[type=color]::-webkit-color-swatch-wrapper{padding:3px}
+.uicol input[type=color]::-webkit-color-swatch{border:0;border-radius:7px}
+.uicol code{font-size:11px;color:var(--muted);min-width:58px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);font-weight:600;color:var(--fg)}
+.seg button.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+.uiprev{position:sticky;top:8px;z-index:5}
+.pv{text-align:center}.pv .greet{margin-bottom:0}
+.pvrow{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px;align-items:center}
+.btn.sm{padding:7px 12px;font-size:13px}
+.uibar{position:fixed;left:10px;right:10px;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;gap:8px;align-items:center;padding:10px 12px;border-radius:16px;background:var(--surface);border:1px solid var(--gold);box-shadow:0 12px 30px rgba(0,0,0,.25);animation:drop .5s cubic-bezier(.3,1.5,.5,1)}
+.uibar[hidden]{display:none}
+.uibar span{flex:1;font-size:13px;font-weight:600}
 /* تأخير */
 .latecard{display:flex;align-items:center;gap:12px;width:100%;max-width:380px;margin:12px auto 0;padding:12px 14px;border-radius:14px;border:1.5px solid var(--warn);background:rgba(230,140,20,.09);color:var(--fg);text-align:right;animation:thglow 1.8s ease-in-out infinite}
 .latecard>svg:first-child{color:var(--warn);flex:none}
@@ -602,7 +630,7 @@ em.lnote{font-style:normal;color:var(--muted)}
   <div class="sub">مرحباً بكم في نظام الحضور والانصراف</div>
 </div>
 
-<div class="welcome" id="welcome" hidden aria-live="polite"><div class="wc"><img src="mark.png" alt=""><b id="wName"></b><div class="dhikr big"><span class="dk-ic">✦</span><span>اذكر الله · وصلِّ على سيدنا محمد</span><span class="saw">ﷺ</span></div><span>شركة سعد مفرح الشمراني للاستشارات الهندسية</span></div></div>
+<div class="welcome" id="welcome" hidden aria-live="polite"><div class="wc"><img src="mark.png" alt=""><b id="wName"></b><div class="dhikr big" id="wDhikr"><span class="dk-ic">✦</span><span class="dk-t">اذكر الله · وصلِّ على سيدنا محمد</span><span class="saw">ﷺ</span></div><span id="wCo">شركة سعد مفرح الشمراني للاستشارات الهندسية</span></div></div>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
@@ -623,7 +651,7 @@ em.lnote{font-style:normal;color:var(--muted)}
 
   <main id="vLogin" class="view auth" hidden>
     <form class="authcard" id="loginForm" novalidate>
-      <div class="themecorner"><button class="iconbtn" data-theme-toggle type="button" aria-label="تبديل الوضع الأبيض والأسود" title="الوضع الأبيض / الأسود"></button></div><div class="lg"><img src="logo-full.png" alt="شركة سعد مفرح الشمراني للاستشارات الهندسية" class="lgfull"><span>أهلاً بك · سجّل دخولك لنظام الحضور</span></div>
+      <div class="themecorner"><button class="iconbtn" data-theme-toggle type="button" aria-label="تبديل الوضع الأبيض والأسود" title="الوضع الأبيض / الأسود"></button></div><div class="lg"><img src="logo-full.png" alt="شركة سعد مفرح الشمراني للاستشارات الهندسية" class="lgfull"><span id="lgSub">أهلاً بك · سجّل دخولك لنظام الحضور</span></div>
       <div class="fl"><label for="lgUser">اسم المستخدم</label><input id="lgUser" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="اسمك أو رقمك" dir="auto"></div>
       <div class="fl"><label for="lgPass">كلمة السر</label><input id="lgPass" type="password" autocomplete="current-password" dir="ltr"></div>
       <label class="remember"><input type="checkbox" id="lgRemember" checked><span>تذكرني على هذا الجهاز</span></label>
@@ -650,6 +678,7 @@ em.lnote{font-style:normal;color:var(--muted)}
   <main id="vMap" class="view" hidden></main>
   <main id="vChat" class="view" hidden></main>
   <main id="vSet" class="view" hidden></main>
+  <main id="vUi" class="view" hidden></main>
 </div>
 
 <nav class="tabbar" id="tabbar" hidden aria-label="التنقل"></nav>
@@ -657,6 +686,6 @@ em.lnote{font-style:normal;color:var(--muted)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=11"></script>
 </body>
 </html>
