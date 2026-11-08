@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=19';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=21';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -86,7 +86,7 @@ const I = {
   pause: "M6 5h4v14H6zM14 5h4v14h-4z"
 };
 const ic = (n, s = 20, w = 1.8) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${I[n]}"/></svg>`;
-const MI = { face: ['face', 'الوجه'], finger: ['finger', 'البصمة'], manual: ['gear', 'المدير (يدوي)'], auto: ['clock', 'تلقائي'] };
+const MI = { tap: ['check', 'زرار'], face: ['face', 'الوجه'], finger: ['finger', 'البصمة'], manual: ['gear', 'المدير (يدوي)'], auto: ['clock', 'تلقائي'] };
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = id => document.getElementById(id);
 
@@ -143,15 +143,15 @@ const notified = (() => {
 })();
 
 const empById = id => emps.find(e => e.id === id) || (meEmp && meEmp.id === id ? meEmp : null);
-const getRec = (emp, key) => autoRec((recs[emp.id] && recs[emp.id][key]) || null, key);
+const getRec = (emp, key) => autoRec((recs[emp.id] && recs[emp.id][key]) || null, key, emp);
 const nset = (k, d) => Number.isFinite(+settings[k]) && settings[k] !== '' && settings[k] != null ? +settings[k] : d;
 const grace = () => nset('grace', DEF_GRACE);          // الحضور: أخضر لحد كده
 const redIn = () => Math.max(grace(), nset('redIn', 15)); // الحضور: أصفر لحد كده، وبعده أحمر
 const brG = () => nset('brGrace', 5);                   // العودة من البريك: أخضر لحد كده
 const brR = () => Math.max(brG(), nset('brRed', 10));   // العودة: أصفر لحد كده، وبعده أحمر
 // خروج البريك والانصراف بيتسجلوا تلقائياً في مواعيدهم
-function autoRec(r, key) {
-  if (!r) return r; const P = planKey(key); if (P.off) return r;
+function autoRec(r, key, emp) {
+  if (!r) return r; const P = planKey(key, emp); if (P.off) return r;
   const past = t => !isToday(key) || nowMin() >= t; let o = r;
   if (P.two && o.in != null && o.out1 == null && past(P.b1)) o = { ...o, out1: P.b1, m: { ...o.m, out1: 'auto' } };
   const last = P.two ? o.in2 : o.in;
@@ -170,10 +170,16 @@ const isSup = e => !!e && e.dept === 'الإشراف';
 const sites = () => Array.isArray(settings.sites) ? settings.sites : [];
 
 /* ========== schedule ========== */
-function dayCfg(dow) { const s = settings.sched && settings.sched[dow]; return s && typeof s === 'object' ? s : DEF_SCHED[dow]; }
+function dayCfg(dow, emp) {
+  const es = emp && emp.sched && emp.sched.mode === 'custom' && emp.sched.days && emp.sched.days[dow];
+  if (es && typeof es === 'object') return es;
+  const s = settings.sched && settings.sched[dow]; return s && typeof s === 'object' ? s : DEF_SCHED[dow];
+}
+// لو الموظف هو اللي فاتح، الدوام بتاعه هو الافتراضي
+const defEmp = () => (typeof meEmp !== 'undefined' && meEmp && !(isOwner || isViewer)) ? meEmp : null;
 // خطة اليوم: الفترات، خانات البصمة، ونافذة كل بصمة
-function planOf(dow) {
-  const c = dayCfg(dow);
+function planOf(dow, emp) {
+  const c = dayCfg(dow, emp);
   if (!c || !c.on || c.s1 == null || c.e1 == null) return { off: true, shifts: [], fields: [], W: {}, start: null, end: null };
   if (c.s2 != null && c.e2 != null && c.s2 > c.e1) {
     const o1end = (c.s2 - c.e1) <= 60 ? c.s2 - 1 : c.e1 + 60;
@@ -182,8 +188,8 @@ function planOf(dow) {
   }
   return { off: false, two: false, shifts: [[c.s1, c.e1]], fields: ['in', 'out'], W: { in: [c.s1 - 30, c.e1 - 1], out: [c.e1, 1439] }, start: c.s1, end: c.e1 };
 }
-const planKey = k => planOf(fromKey(k).getDay());
-const todayPlan = () => planKey(todayKey());
+const planKey = (k, emp) => planOf(fromKey(k).getDay(), emp === undefined ? defEmp() : emp);
+const todayPlan = emp => planKey(todayKey(), emp);
 
 function docToRec(d) {
   const r = { m: {}, ph: {}, geo: {} };
@@ -199,7 +205,7 @@ function docToRec(d) {
 function empFromDoc(s) {
   const d = s.data();
   const created = d.createdAt && d.createdAt.toMillis ? keyOfIdx(dayIdx(d.createdAt.toMillis())) : todayKey();
-  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', watch: !!d.watch, profileDone: !!d.profileDone, emergency: d.emergency || '', about: d.about || '' };
+  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', watch: !!d.watch, profileDone: !!d.profileDone, methods: d.methods || 'both', punchSite: d.punchSite || 'auto', liveSite: d.liveSite || 'auto', sched: d.sched || null, emergency: d.emergency || '', about: d.about || '' };
 }
 
 /* ========== day logic ========== */
@@ -209,7 +215,7 @@ function status(emp, key) {
   const d = fromKey(key), t = today0();
   if (key < emp.start) return 'none';
   if (d > t) return 'future';
-  const P = planKey(key);
+  const P = planKey(key, emp);
   if (P.off) return 'off';
   const r = getRec(emp, key), isT = isToday(key), n = nowMin();
   if (!r) { if (isT) return n > P.start + grace() ? 'missing' : 'pending'; return 'absent'; }
@@ -221,13 +227,13 @@ function liveStatus(emp) {
   if (!emp.active) return 'inactive';
   const key = todayKey(), st = status(emp, key);
   if (['off', 'missing', 'pending', 'none'].includes(st)) return st === 'none' ? 'pending' : st;
-  const r = getRec(emp, key), P = todayPlan();
+  const r = getRec(emp, key), P = todayPlan(emp);
   if (r.out != null) return 'done';
   if (P.two && r.out1 != null && r.in2 == null) return 'break';
   return st;
 }
-function worked(r, key) {
-  if (!r) return 0; const isT = isToday(key), n = nowMin(), P = planKey(key);
+function worked(r, key, emp) {
+  if (!r) return 0; const isT = isToday(key), n = nowMin(), P = planKey(key, emp);
   if (P.off) { return r.in != null && r.out != null ? Math.max(0, r.out - r.in) : 0; }
   const cap = e => isT ? Math.min(n, e) : e;
   if (!P.two) return r.in != null ? Math.max(0, (r.out != null ? r.out : cap(P.end)) - r.in) : 0;
@@ -255,7 +261,7 @@ function stats(emp, from, to) {
   const t = today0(), end = to < t ? to : t; const o = { att: 0, abs: 0, late: 0, half: 0, hrs: 0, days: 0 };
   for (let d = new Date(from); d <= end; d = addDays(d, 1)) {
     const k = keyOf(d), s = status(emp, k);
-    if (s === 'present' || s === 'late' || s === 'half') { o.att++; o.hrs += worked(getRec(emp, k), k); }
+    if (s === 'present' || s === 'late' || s === 'half') { o.att++; o.hrs += worked(getRec(emp, k), k, emp); }
     if (s === 'late') o.late++; if (s === 'half') o.half++;
     if (s === 'absent' || s === 'missing') o.abs++;
     if (['present', 'late', 'half', 'absent', 'missing'].includes(s)) o.days++;
@@ -333,14 +339,25 @@ async function liveRest(p) {
 }
 function devId() { let d = null; try { d = localStorage.getItem('sh-dev'); if (!d) { d = 'and-' + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('sh-dev', d); } } catch (e) { d = 'and-x'; } return d; }
 
+// بيرجّع true لو الإشعار ظهر، أو رسالة الخطأ
 async function sysNotify(title, body, tag, go) {
-  if (NATIVE && LNot) { try { await LNot.schedule({ notifications: [{ id: (natNid = (natNid % 100000) + 1) + 1000, title, body, extra: { go: go || '' } }] }); } catch (e) { } return; }
-  try {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    const reg = await navigator.serviceWorker.getRegistration();
-    const opt = { body, icon: 'logo-192.png', badge: 'badge-96.png', lang: 'ar', dir: 'rtl', tag: tag || (title + body), renotify: !!tag, vibrate: [80, 40, 80], data: { go: go || '' } };
-    if (reg) reg.showNotification(title, opt); else new Notification(title, opt);
-  } catch (e) { }
+  if (NATIVE && LNot) {
+    try { await LNot.schedule({ notifications: [{ id: 1000 + (natNid = (natNid % 40000) + 1), title, body, extra: { go: go || '' } }] }); return true; }
+    catch (e) { return (e && e.message) || 'native-error'; }
+  }
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission !== 'granted') return 'permission-' + Notification.permission;
+  const full = { body, icon: 'logo-192.png', badge: 'badge-96.png', lang: 'ar', dir: 'rtl', tag: tag || ('n' + Date.now()), renotify: !!tag, vibrate: [80, 40, 80], data: { go: go || '' } };
+  const mini = { body, icon: 'logo-192.png', tag: full.tag, data: { go: go || '' } };
+  let reg = null;
+  try { reg = (await navigator.serviceWorker.getRegistration()) || (await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))])); } catch (e) { }
+  let err = '';
+  if (reg) {
+    try { await reg.showNotification(title, full); return true; } catch (e) { err = e && e.message; }
+    try { await reg.showNotification(title, mini); return true; } catch (e) { err = e && e.message; }
+  }
+  try { new Notification(title, mini); return true; } catch (e) { err = err || (e && e.message); }
+  return err || 'no-sw';
 }
 const notifCat = (kind, tag) => kind === 'pray' ? 'pray' : kind === 'salawat' ? 'salawat' : kind === 'chat' || tag === 'chat' ? 'chat' : 'att';
 const NP0 = { att: true, chat: true, pray: true, salawat: true };
@@ -501,7 +518,7 @@ const COLOR_DEF = [
 const TEXT_DEF = [
   ['الذكر والترحيب', [['dhikr', 'نص الذكر', 'اذكر الله · وصلِّ على سيدنا محمد ﷺ'], ['welcomeSub', 'السطر الأخير في شاشة الترحيب', 'شركة سعد مفرح الشمراني للاستشارات الهندسية'], ['morning', 'تحية الصبح', 'صباح الخير'], ['evening', 'تحية المسا', 'مساء الخير'], ['ownerHello', 'عنوان لوحة المالك', 'أهلاً بك في لوحة التحكم'], ['viewerHello', 'عنوان حساب المتابعة', 'متابعة الحضور والانصراف']]],
   ['الشركة وتسجيل الدخول', [['company', 'اسم الشركة', 'شركة سعد مفرح الشمراني للاستشارات الهندسية'], ['loginSub', 'الجملة تحت اللوجو في تسجيل الدخول', 'أهلاً بك · سجّل دخولك لنظام الحضور']]],
-  ['شاشة الموظف', [['faceBtn', 'زرار بصمة الوجه', 'بصمة الوجه'], ['fpBtn', 'زرار بصمة الإصبع', 'بصمة الإصبع'], ['liveStart', 'زرار بدء اللايف', 'ابدأ لايف لوكيشن'], ['liveOn', 'اللايف شغّال', 'اللايف لوكيشن شغّال'], ['fl_in', 'اسم بصمة الحضور', 'الحضور'], ['fl_out1', 'اسم خروج البريك', 'خروج البريك'], ['fl_in2', 'اسم العودة', 'العودة'], ['fl_out', 'اسم الانصراف', 'الانصراف']]],
+  ['شاشة الموظف', [['faceBtn', 'زرار التسجيل السريع', 'سجّل الآن'], ['fpBtn', 'زرار بصمة الإصبع', 'بصمة الإصبع'], ['liveStart', 'زرار بدء اللايف', 'ابدأ لايف لوكيشن'], ['liveOn', 'اللايف شغّال', 'اللايف لوكيشن شغّال'], ['fl_in', 'اسم بصمة الحضور', 'الحضور'], ['fl_out1', 'اسم خروج البريك', 'خروج البريك'], ['fl_in2', 'اسم العودة', 'العودة'], ['fl_out', 'اسم الانصراف', 'الانصراف']]],
   ['التأخير', [['lateMsg', 'رسالة الموظف المتأخر', 'اكتب سبب التأخير وهيوصل للمدير، أو كلّمه مباشرة، أو اكتب في الشات.'], ['lateReasons', 'أسباب جاهزة (افصل بينها بفاصلة)', 'زحمة طريق، ظرف عائلي، موعد طبي، كنت في موقع عمل']]],
   ['الصلاة', [['prayMsg', 'رسالة تذكير الصلاة', 'قم للوضوء 🕌']]],
   ['الشات', [['chatTitle', 'عنوان الشات', 'الشات الداخلي'], ['chatSub', 'وصف الشات', 'لكل موظفي الشركة']]],
@@ -615,11 +632,11 @@ function mountProfile(root, emp, withPhotos) {
     root.querySelector('[data-nav="-1"]').disabled = st.y === t.getFullYear() && st.m === t.getMonth();
   }
   function renderDet() {
-    if (!st.sel) return; const s = status(emp, st.sel), r = getRec(emp, st.sel), d = fromKey(st.sel), P = planKey(st.sel);
+    if (!st.sel) return; const s = status(emp, st.sel), r = getRec(emp, st.sel), d = fromKey(st.sel), P = planKey(st.sel, emp);
     let h = `<b>${dFmt.format(d)}</b> · <span class="chip c-${s}">${STL[s] || '—'}</span>`;
     if (r) {
       const fs = P.off ? ALL.filter(f => r[f] != null) : P.fields;
-      h += `<div class="muted small" style="margin-top:4px">` + fs.map(f => tv(f, r, P, true) + (r.m[f] === 'manual' ? ' (يدوي)' : '')).join(' ') + ` · صافي ${dur(worked(r, st.sel))}</div>`;
+      h += `<div class="muted small" style="margin-top:4px">` + fs.map(f => tv(f, r, P, true) + (r.m[f] === 'manual' ? ' (يدوي)' : '')).join(' ') + ` · صافي ${dur(worked(r, st.sel, emp))}</div>`;
       if (r.note) h += `<div class="lnotebox">${ic('alert', 14)} سبب تأخير الحضور: ${esc(r.note)}</div>`;
       if (r.note2) h += `<div class="lnotebox">${ic('alert', 14)} سبب تأخير العودة: ${esc(r.note2)}</div>`;
       if (withPhotos) {
@@ -680,15 +697,16 @@ function renderEmp() {
     <div class="stage" style="margin-top:22px">
      <div class="scan" id="scan">
       <svg class="ring" viewBox="0 0 208 208"><circle class="track" cx="104" cy="104" r="98"/><circle class="orbit" cx="104" cy="104" r="98" pathLength="100"/><circle class="prog" id="prog" cx="104" cy="104" r="98" pathLength="100"/></svg>
-      <div class="core" id="core"><span class="face">${ic('face', 70, 1.2)}</span></div>
+      <div class="core" id="core">${coreIcon()}</div>
       <div class="laser"></div>
       <div class="tick"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path pathLength="30" d="M5 12l5 5L20 7"/></svg></div>
      </div>
      <div class="next-label" id="nextLbl"></div>
      <div class="hint" id="hint"></div>
      <div class="actions">
-      <button class="btn primary" id="bFace">${ic('camera', 18)} ${esc(T('faceBtn'))}</button>
-      <button class="btn ghost" id="bFp"${window.__bio ? '' : ' hidden'}>${ic('finger', 18)} ${esc(T('fpBtn'))}</button>
+      ${methodOf(emp) !== 'finger' ? `<button class="btn primary" id="bTap">${ic('check', 18)} ${esc(T('faceBtn'))}</button>` : ''}
+      ${methodOf(emp) !== 'tap' ? `<button class="btn ${methodOf(emp) === 'finger' ? 'primary' : 'ghost'}" id="bFp"${window.__bio ? '' : ' hidden'}>${ic('finger', 18)} ${esc(T('fpBtn'))}</button>` : ''}
+      ${methodOf(emp) === 'finger' && !window.__bio ? '<p class="muted small" style="margin:0">بصمة الإصبع مش متاحة على الجوال ده. فعّلها من «حسابي» أو كلّم المدير.</p>' : ''}
      </div>
      <div class="devline" id="devline"></div>
      <div class="devline">${ic('pin', 13)} ${esc(geoRuleText(emp))}</div>
@@ -747,7 +765,7 @@ function updateEmpLive(full) {
     const A = allowed(r, n, P), all = !P.off && !nf0;
     $('nextLbl').textContent = P.off ? 'لا يوجد دوام اليوم' : all ? 'اكتمل تسجيل اليوم' : A.f ? ACT[A.f] : A.msg;
     $('hint').textContent = P.off ? '' : all ? 'تم تسجيل كل البصمات' : A.f ? ACT[A.f] + ' متاح حتى ' + tm(P.W[A.f][1]) : A.sub;
-    ['bFace', 'bFp'].forEach(id => $(id).disabled = !A.f);
+    ['bTap', 'bFp'].forEach(id => { const b = $(id); if (b) b.disabled = !A.f; });
     $('scan').classList.toggle('locked', !A.f);
     $('devline').innerHTML = window.__bio ? (emp.cred ? `${ic('device', 13)} بصمة جهازك مربوطة بحسابك` : `${ic('device', 13)} أول بصمة إصبع هتربط هذا الجوال بحسابك`) : `${ic('device', 13)} بصمة الإصبع غير متاحة على هذا الجهاز`;
     const fs = P.off ? [] : P.fields;
@@ -763,12 +781,18 @@ function updateEmpLive(full) {
   if (wtEl) { let s = Math.max(0, Math.floor(worked(r, key) * 60)); wtEl.textContent = nf2.format(Math.floor(s / 3600)) + ':' + nf2.format(Math.floor(s % 3600 / 60)) + ':' + nf2.format(s % 60); }
 }
 
+const methodOf = e => (e && e.methods) || 'both';
+const coreIcon = () => `<span class="face">${ic(methodOf(meEmp) === 'finger' ? 'finger' : 'check', 70, 1.2)}</span>`;
 function bindScan() {
-  const bFace = $('bFace'), bFp = $('bFp'), cam = $('cam');
-  bFace.onclick = () => {
+  const bTap = $('bTap'), bFp = $('bFp'), cam = $('cam');
+  const tap = async () => {
     if (busy) return; const A = allowed(myRec(), nowMin(), todayPlan()); if (!A.f) { runFail(A.msg); return; }
-    cam.value = ''; cam.click();
+    if (needSite(A.f)) { pendingSite = await siteCapture(FL[A.f]); if (!pendingSite) { runFail('لازم صورة الموقع واسم الحي عشان يتسجّل ' + FL[A.f]); return; } }
+    vibrate(25); doPunch('tap', null, 'جارٍ التسجيل…');
   };
+  if (bTap) { bTap.onclick = tap; $('scan').onclick = tap; $('scan').classList.add('tappable'); }
+  else if (bFp) $('scan').onclick = () => bFp.click();
+  if (!cam) return;
   cam.onchange = async () => {
     const f = cam.files && cam.files[0]; if (!f) return;
     let thumb = null;
@@ -780,10 +804,10 @@ function bindScan() {
     } catch (e) { runFail('تعذّر قراءة الصورة، حاول مرة أخرى'); return; }
     $('core').innerHTML = `<img src="${thumb}" alt="">`;
     const A = allowed(myRec(), nowMin(), todayPlan());
-    if (A.f && needSite(A.f)) { pendingSite = await siteCapture(FL[A.f]); if (!pendingSite) { runFail('لازم صورة الموقع واسم الحي عشان يتسجّل ' + FL[A.f]); $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; return; } }
+    if (A.f && needSite(A.f)) { pendingSite = await siteCapture(FL[A.f]); if (!pendingSite) { runFail('لازم صورة الموقع واسم الحي عشان يتسجّل ' + FL[A.f]); $('core').innerHTML = `${coreIcon()}`; return; } }
     doPunch('face', thumb, 'جارٍ التحقق من الوجه…');
   };
-  bFp.onclick = async () => {
+  if (bFp) bFp.onclick = async () => {
     if (busy || bFp.disabled) return;
     const A = allowed(myRec(), nowMin(), todayPlan()); if (!A.f) { runFail(A.msg); return; }
     busy = true; $('scan').classList.add('busy'); $('hint').textContent = 'ضع إصبعك على حساس الجوال أو استخدم Face ID…';
@@ -808,8 +832,8 @@ async function doPunch(method, thumb, label) {
     const P = todayPlan();
     $('hint').textContent = `تم ${FL[res.f]} ${tm(res.t)}` + (res.late ? ' · تأخير ' + dur(res.t - (res.f === 'in' ? P.start : P.b2)) : '');
     toast(res.late ? 'warn' : 'ok', `${FL[res.f]} ${tm(res.t)}`, `تم التحقق ب${MI[method][1]} · وصل إشعار للمالك`, 'تسجيلك');
-    setTimeout(() => { scan.classList.remove('ok'); prog.style.strokeDashoffset = 100; $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; busy = false; updateEmpLive(true); const sl = document.querySelector(`[data-slot="${res.f}"]`); sl && sl.classList.add('flash'); if (res.late) openLateSheet(res.f, res.t - (res.f === 'in' ? P.start : P.b2)); }, 1700);
-  } else { busy = false; runFail(res.msg); setTimeout(() => { $('core').innerHTML = `<span class="face">${ic('face', 70, 1.2)}</span>`; updateEmpLive(true); }, 800); }
+    setTimeout(() => { scan.classList.remove('ok'); prog.style.strokeDashoffset = 100; $('core').innerHTML = `${coreIcon()}`; busy = false; updateEmpLive(true); const sl = document.querySelector(`[data-slot="${res.f}"]`); sl && sl.classList.add('flash'); if (res.late) openLateSheet(res.f, res.t - (res.f === 'in' ? P.start : P.b2)); }, 1700);
+  } else { busy = false; runFail(res.msg); setTimeout(() => { $('core').innerHTML = `${coreIcon()}`; updateEmpLive(true); }, 800); }
 }
 /* ========== مواقيت الصلاة (تقويم أم القرى) ========== */
 // الحساب على الجهاز من غير إنترنت: الفجر ١٨٫٥°، العشاء بعد المغرب بـ ٩٠ دقيقة (١٢٠ في رمضان)
@@ -898,6 +922,7 @@ function notifCardHTML() {
   const P = notifPrefs(), row = (k, l, d) => `<label class="switch nrow"><input type="checkbox" data-np="${k}" ${P[k] !== false ? 'checked' : ''}><span><b>${l}</b><small>${d}</small></span></label>`;
   return `<section class="card reveal notifcard" style="margin-top:14px"><h2>${ic('bell', 18)} إشعارات الجوال</h2>
    <div class="nstate" id="nState"><span class="muted small">جارٍ التحقق…</span></div>
+   <div class="ndiag" id="nDiag"></div>
    <div class="row-btns" style="margin:10px 0"><button class="btn primary" type="button" id="nOn">${ic('bell', 16)} تفعيل الإشعارات</button><button class="btn ghost" type="button" id="nTest">${ic('check', 16)} إشعار تجريبي</button></div>
    ${row('att', 'الحضور والانصراف', canSee() ? 'مين حضر ومين اتأخر، والبريك والانصراف' : 'تذكير بتسجيل الحضور والعودة من البريك والانصراف')}
    ${row('chat', 'رسايل الشات', 'أي رسالة جديدة في الشات الداخلي')}
@@ -910,11 +935,27 @@ async function paintNotifState() {
   const M = { granted: ['ok', 'الإشعارات مفعّلة ✅ وهتظهر في إشعارات الجوال'], default: ['warn', 'الإشعارات لسه مش مفعّلة. دوس «تفعيل الإشعارات» ووافق.'], denied: ['bad', 'الإشعارات مقفولة من إعدادات الجوال. افتح الإعدادات ← التطبيقات ← ' + (NATIVE ? 'بصمة الشمراني' : 'المتصفح') + ' ← الإشعارات، وفعّلها.'], unsupported: ['warn', 'المتصفح ده مش بيدعم الإشعارات. على الآيفون: ثبّت التطبيق على الشاشة الرئيسية من Safari وافتحه من الأيقونة. على الأندرويد: استخدم تطبيق الأندرويد أو Chrome.'] }[st];
   el.innerHTML = `<div class="nst nst-${M[0]}">${ic(st === 'granted' ? 'check' : 'alert', 16)}<span>${M[1]}</span></div>`;
   const b = $('nOn'); if (b) b.hidden = st === 'granted' || st === 'unsupported';
+  paintDiag(st);
+}
+let lastTest = '';
+async function paintDiag(st) {
+  const el = $('nDiag'); if (!el) return;
+  const ua = navigator.userAgent, dev = /iPhone|iPad/.test(ua) ? 'آيفون' : /Android/.test(ua) ? 'أندرويد' : 'كمبيوتر';
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const mode = NATIVE ? 'تطبيق الأندرويد' : standalone ? 'مثبّت على الشاشة الرئيسية' : 'من المتصفح';
+  let sw = 'غير موجود'; try { const r = await navigator.serviceWorker.getRegistration(); if (r && r.active) sw = 'شغال'; else if (r) sw = 'بيتجهّز'; } catch (e) { sw = NATIVE ? '—' : 'غير مدعوم'; }
+  const iosOk = !/iPhone|iPad/.test(ua) || standalone;
+  el.innerHTML = `<b>تشخيص</b><span>الجهاز: ${dev}</span><span>الفتح: ${mode}${!iosOk ? ' ⚠️ على الآيفون لازم يتفتح من أيقونة الشاشة الرئيسية' : ''}</span><span>إذن الإشعارات: ${({ granted: 'مسموح ✅', denied: 'مرفوض ❌', default: 'لسه ما اتطلبش', unsupported: 'غير مدعوم ❌' })[st] || st}</span>${NATIVE ? '' : `<span>خدمة الإشعارات: ${sw}</span>`}${lastTest ? `<span>آخر إشعار تجريبي: ${lastTest}</span>` : ''}`;
 }
 function bindNotifCard() {
   if (!$('nOn')) return; paintNotifState();
   $('nOn').onclick = async () => { const st = await enableNotifs(); paintNotifState(); if (st === 'granted') { toast('ok', 'تم تفعيل الإشعارات', 'هتوصلك في إشعارات الجوال', 'الإشعارات'); sysNotify('بصمة الشمراني', 'الإشعارات شغالة ✅', 'test', ''); } else if (st === 'denied') toast('bad', 'الإشعارات مرفوضة', 'فعّلها من إعدادات الجوال', 'الإشعارات'); };
-  $('nTest').onclick = async () => { const st = await notifState(); if (st !== 'granted') { toast('warn', 'فعّل الإشعارات الأول', '', 'الإشعارات'); return; } sysNotify('إشعار تجريبي 🔔', 'لو شايف الرسالة دي في إشعارات الجوال يبقى كله تمام', 'test', ''); toast('ok', 'اتبعت إشعار تجريبي', 'بُص على إشعارات الجوال', 'الإشعارات'); };
+  $('nTest').onclick = async () => {
+    const st = await notifState(); if (st !== 'granted') { toast('warn', 'فعّل الإشعارات الأول', '', 'الإشعارات'); paintNotifState(); return; }
+    const r = await sysNotify('إشعار تجريبي 🔔', 'لو شايف الرسالة دي في إشعارات الجوال يبقى كله تمام', '', '');
+    lastTest = r === true ? 'اتبعت ✅' : 'فشل ❌ (' + r + ')'; paintNotifState();
+    if (r === true) toast('ok', 'اتبعت إشعار تجريبي', 'بُص على شريط الإشعارات فوق', 'الإشعارات'); else toast('bad', 'الإشعار ما اتبعتش', String(r), 'الإشعارات');
+  };
   document.querySelectorAll('[data-np]').forEach(i => i.onchange = () => setNotifPref(i.dataset.np, i.checked));
 }
 function checkPrayer() {
@@ -942,7 +983,7 @@ function setWatch(on) {
 }
 const allEmps = () => canSee() ? emps : isWatch ? wEmps : [];
 function dayStatus(e, k) {
-  const P = planKey(k), r = getRec(e, k);
+  const P = planKey(k, e), r = getRec(e, k);
   if (k < e.start) return { s: 'na' };
   if (r && (r.in != null || r.in2 != null)) {
     const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
@@ -969,7 +1010,7 @@ function paintWatch() {
   $('wK').innerHTML = [['حاضر', c(['ok', 'early', 'late', 'vlate', 'extra']), 'g'], ['بدري', c(['early']), 'g'], ['متأخر', c(['late', 'vlate']), 'y'], ['غائب', c(['absent']), 'r']].map(([l, n, t]) => `<div class="wk wk-${t}"><b class="num">${ar(n)}</b><small>${l}</small></div>`).join('');
   const order = { absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
   el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
-    const r = d.r, P = d.P || planKey(k), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '';
+    const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '';
     return `<div class="wrow"><div class="av">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span></b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}</div></div>`;
   }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين في اليوم ده</p>';
 }
@@ -1006,10 +1047,10 @@ async function exportXlsx(fromK, toK, label, fname) {
       let wd = 0, pr = 0, ab = 0, ok = 0, ea = 0, la = 0, vl = 0, lm = 0, mins = 0;
       for (let i = a; i <= b; i++) {
         const k = keyOfIdx(i); if (k < e.start) continue;
-        const P = planKey(k), r = autoRec((R[e.id] && R[e.id][k]) || null, k), has = r && (r.in != null || r.in2 != null);
+        const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
         if (!P.off) wd++;
         if (!has) { if (P.off || (isToday(k) && nowMin() < P.start + grace())) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
-        pr++; const w = worked(r, k); mins += w;
+        pr++; const w = worked(r, k, e); mins += w;
         let st = 'حضر في إجازة', late = 0;
         if (!P.off) {
           const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
@@ -1185,7 +1226,8 @@ function openLog() {
 
 /* ----- قسم الإشراف: صورة الموقع واسم الحي قبل الحضور واللايف ----- */
 let pendingSite = null, myVisits = [], visits = [], visitsFirst = true, mapTab = 'live';
-const needSite = f => isSup(meEmp) && (f === 'in' || f === 'in2');
+const siteRule = (e, k) => e && e[k] === 'on' ? true : e && e[k] === 'off' ? false : isSup(e);
+const needSite = f => (f === 'in' || f === 'in2') && siteRule(meEmp, 'punchSite');
 const VK = { in: 'حضور', in2: 'عودة من البريك', live: 'بدء لايف لوكيشن', visit: 'زيارة موقع' };
 const geoCache = {};
 async function districtOf(g) {
@@ -1429,7 +1471,7 @@ function renderLive() {
   const v = $('vLive');
   v.innerHTML = `<section class="card reveal">
     <h2>${isSup(meEmp) ? 'الإشراف · ' : ''}موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
-    <p class="muted small" style="margin:0 0 12px">${isSup(meEmp) ? 'قسم الإشراف: لازم صورة الموقع واسم الحي قبل ما يبدأ اللايف أو يتسجّل الحضور. تقدر تسجّل من أي مكان على الخريطة.' : 'لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.'}</p>
+    <p class="muted small" style="margin:0 0 12px">${siteRule(meEmp, 'liveSite') ? 'لازم صورة الموقع واسم الحي قبل ما يبدأ اللايف' + (siteRule(meEmp, 'punchSite') ? ' أو يتسجّل الحضور' : '') + (isSup(meEmp) ? '. تقدر تسجّل من أي مكان على الخريطة.' : '.') : 'لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.'}</p>
     <div class="map" id="myMap"></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
     <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ لايف لوكيشن'}</button>
@@ -1473,7 +1515,7 @@ async function startLive(resume) {
   const er = $('lvErr'); if (er) er.textContent = '';
   if (!navigator.geolocation) { if (er) er.textContent = 'الجوال لا يدعم تحديد الموقع'; return; }
   let st = null, mid = null;
-  if (!resume && isSup(meEmp)) {
+  if (!resume && siteRule(meEmp, 'liveSite')) {
     st = await siteCapture('بدء اللايف'); if (!st) { const e2 = $('lvErr'); if (e2) e2.textContent = 'لازم صورة الموقع واسم الحي عشان يبدأ اللايف'; return; }
     try { mid = await saveSiteMedia(st); } catch (e) { const e2 = $('lvErr'); if (e2) e2.textContent = 'تعذّر رفع صورة الموقع، حاول مرة أخرى'; return; }
   }
@@ -1936,12 +1978,12 @@ function stopRec(send) { if (!rec) return; rec.send = send; vibrate(send ? 30 : 
 
 /* ========== owner ========== */
 function ownerEvents() {
-  const key = todayKey(), n = nowMin(), list = [], P = todayPlan(), G = grace();
+  const key = todayKey(), n = nowMin(), list = [], G = grace();
   emps.filter(e => e.active && inDept(e)).forEach(e => {
-    const r = getRec(e, key);
+    const r = getRec(e, key), P = todayPlan(e);
     if (r) ALL.forEach(f => { if (r[f] != null) { const late = (f === 'in' && !P.off && r.in > P.start + G) || (f === 'in2' && P.two && r.in2 > P.b2 + G); list.push({ emp: e.id, f, t: r[f], method: r.m[f], late }); } });
     if (!P.off && !r && n > P.start + G && key >= e.start) list.push({ emp: e.id, miss: 'in', t: P.start + G });
-    if (P.two && r && r.out1 != null && r.in2 == null && n > P.b2 + G) list.push({ emp: e.id, miss: 'in2', t: P.b2 + G });
+    if (P.two && r && r.out1 != null && r.in2 == null && n > P.b2 + brG()) list.push({ emp: e.id, miss: 'in2', t: P.b2 + G });
   });
   return list.sort((a, b) => b.t - a.t);
 }
@@ -1951,7 +1993,7 @@ function evHTML(x, isNew) {
   const kind = x.late ? 'warn' : x.f === 'out1' || x.f === 'in2' ? 'info' : x.f === 'out' ? 'gold' : 'ok';
   const icon = x.f === 'in' ? 'login' : x.f === 'out' ? 'logout' : 'coffee';
   const m = x.method && MI[x.method] ? MI[x.method][1] : '';
-  const P0 = todayPlan(), early = x.f === 'in' && !P0.off && x.t < P0.start;
+  const P0 = todayPlan(e), early = x.f === 'in' && !P0.off && x.t < P0.start;
   return `<div class="ev${isNew ? ' new' : ''}"><div class="ico i-${kind}">${ic(icon, 16)}</div><div class="tx">${esc(e.name)} · ${FL[x.f]}${x.late ? ' متأخر' : early ? ' بدري' : ''}<small>${tm(x.t)}${m ? ' · بصمة ' + m : ''}${e.dept ? ' · ' + esc(e.dept) : ''}</small></div></div>`;
 }
 function renderFeed(isNew) {
@@ -1990,7 +2032,7 @@ function renderOwner() {
    <section class="card reveal" style="animation-delay:.1s">
     <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
     <div id="empList">${list.length ? list.map(e => {
-      const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb);
+      const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
       const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '');
       const av = e.photoSm || e.photo || (r && ALL.map(f => r.ph[f]).filter(Boolean).pop()); const lv = fresh(lives[e.id]);
@@ -2048,16 +2090,23 @@ let secondary = null;
 function getSecondary() { if (!secondary) { const a = initializeApp(firebaseConfig, 'secondary'); secondary = { app: a, auth: getAuth(a) }; } return secondary; }
 function checkOwnerAlerts() {
   if (!canSee()) return;
-  const key = todayKey(), P = todayPlan(); if (P.off) return;
+  const key = todayKey(), P = todayPlan(null);
   const n = nowMin(), G = grace();
   emps.filter(e => e.active && e.start <= key).forEach(e => {
+    const P = todayPlan(e); if (P.off) return;
     const r = getRec(e, key);
+    if (e.sched && e.sched.mode === 'custom') {
+      const kb = key + e.id + 'auto-b', ko = key + e.id + 'auto-o';
+      if (r && r.m.out1 === 'auto' && P.two && n >= P.b1 && n < P.b1 + 30 && !notified.has(kb)) { notified.add(kb); alertBoth('info', e.name + ' · خروج البريك', 'اتسجّل تلقائياً الساعة ' + tm(P.b1), 'إشعار للمالك'); }
+      if (r && r.m.out === 'auto' && n >= P.end && n < P.end + 60 && !notified.has(ko)) { notified.add(ko); alertBoth('info', e.name + ' · انصراف', 'اتسجّل تلقائياً الساعة ' + tm(P.end), 'إشعار للمالك'); }
+    }
     const k1 = key + e.id + 'miss-in', k2 = key + e.id + 'miss-back';
     if (!r && n >= P.start + G && n < P.W.in[1] && !notified.has(k1)) { notified.add(k1); alertBoth('bad', e.name + ' لم يسجّل حضور', (e.dept ? 'قسم ' + e.dept + ' · ' : '') + 'تجاوز ' + tm(P.start + G), 'إشعار للمالك'); }
     if (P.two && r && r.out1 != null && r.in2 == null && n >= P.b2 + brG() && n < P.W.in2[1] && !notified.has(k2)) { notified.add(k2); alertBoth('warn', e.name + ' لم يعد من البريك', 'تجاوز ' + tm(P.b2 + brG()), 'إشعار للمالك'); }
   });
   // ملخص الخروج التلقائي للبريك والانصراف
-  const act = emps.filter(e => e.active && e.start <= key);
+  if (P.off) return;
+  const act = emps.filter(e => e.active && e.start <= key && !(e.sched && e.sched.mode === 'custom'));
   const nB = act.filter(e => { const r = getRec(e, key); return r && r.m.out1 === 'auto'; }).length;
   const nO = act.filter(e => { const r = getRec(e, key); return r && r.m.out === 'auto'; }).length;
   if (P.two && nB && n >= P.b1 && n < P.b1 + 30 && !notified.has(key + 'auto-b')) { notified.add(key + 'auto-b'); alertBoth('info', 'خروج البريك', `تم تسجيل خروج ${ar(nB)} موظف للبريك تلقائياً الساعة ${tm(P.b1)}`, 'إشعار للمالك', 'auto-b', 'vOwn'); }
@@ -2101,6 +2150,22 @@ function openSheet(id) {
      <button class="btn primary" id="pwSave" type="button" style="width:100%">${ic('key', 16)} تغيير كلمة السر</button>
      <div class="err" id="pwErr"></div>
     </div>
+    <div class="card ctlbox" style="padding:14px;margin:0 0 12px">
+     <b class="gt">${ic('gear', 16)} التحكم في الموظف</b>
+     <div class="ggrid" style="margin-top:8px">
+      <div class="fl"><label for="cMeth">طريقة التسجيل</label><select id="cMeth">${[['both', 'زرار + بصمة إصبع'], ['tap', 'زرار بس'], ['finger', 'بصمة إصبع بس']].map(([v, l]) => `<option value="${v}" ${methodOf(emp) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="fl"><label for="cPSite">صورة الموقع مع الحضور</label><select id="cPSite">${[['auto', 'حسب القسم'], ['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(emp.punchSite || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="fl"><label for="cLSite">صورة الموقع مع اللايف</label><select id="cLSite">${[['auto', 'حسب القسم'], ['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(emp.liveSite || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="fl"><label for="cSchM">الدوام</label><select id="cSchM"><option value="global" ${!(emp.sched && emp.sched.mode === 'custom') ? 'selected' : ''}>الدوام العام للشركة</option><option value="custom" ${emp.sched && emp.sched.mode === 'custom' ? 'selected' : ''}>دوام خاص بيه</option></select></div>
+     </div>
+     <p class="muted small" style="margin:2px 0 0">«حسب القسم»: صورة الموقع مطلوبة لقسم الإشراف بس.</p>
+     <div id="cSchBox" ${emp.sched && emp.sched.mode === 'custom' ? '' : 'hidden'}>
+      <div class="row-btns" style="margin:10px 0 8px"><button class="btn ghost" type="button" id="cSchCopy">${ic('restart', 14)} انسخ الدوام العام</button><button class="btn ghost" type="button" id="cSchOne">${ic('coffee', 14)} إلغاء البريك (دوام واحد)</button></div>
+      <div class="sched" id="cSched">${DAY_ORDER.map(d => schedRowHTML(d, dayCfg(d, emp))).join('')}</div>
+     </div>
+     <button class="btn primary" type="button" id="cSave" style="width:100%;margin-top:10px">${ic('check', 16)} حفظ إعدادات الموظف</button>
+     <div class="err" id="cErr"></div>
+    </div>
     <div class="card manbox" style="padding:14px;margin:0 0 12px">
      <b class="gt">${ic('edit', 16)} تحضير يدوي وتعديل البصمات</b>
      <p class="muted small" style="margin:4px 0 10px">لو الموظف غايب أو نسي يبصم، حدد اليوم واكتب الأوقات. سيب الخانة فاضية عشان تمسحها.</p>
@@ -2131,6 +2196,21 @@ function openSheet(id) {
   };
   const sl = $('shLive'); if (sl) sl.onclick = () => { closeSheet(); renderMap(); setTimeout(() => { const l = lives[emp.id]; if (ownMap && l) ownMap.setView([l.lat, l.lng], 17); }, 900); };
   $('shActive').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { active: !emp.active }); closeSheet(); toast('ok', emp.active ? 'تم إيقاف حساب ' + emp.name : 'تم تفعيل حساب ' + emp.name, '', 'الإدارة'); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
+  schedBind($('cSched'));
+  $('cSchM').onchange = e => { $('cSchBox').hidden = e.target.value !== 'custom'; };
+  $('cSchCopy').onclick = () => { $('cSched').innerHTML = DAY_ORDER.map(d => schedRowHTML(d, dayCfg(d, null))).join(''); };
+  $('cSchOne').onclick = () => {
+    const { out } = readSched($('cSched'));
+    $('cSched').innerHTML = DAY_ORDER.map(d => { const c = out[d] || { on: false }; return schedRowHTML(d, c.on && c.s2 != null ? { on: true, s1: c.s1, e1: c.e2 } : c); }).join('');
+    toast('info', 'اتلغى البريك', 'كل يوم بقى فترة واحدة من أول الدوام لآخره · دوس حفظ', 'الإدارة');
+  };
+  $('cSave').onclick = async () => {
+    const data = { methods: $('cMeth').value, punchSite: $('cPSite').value, liveSite: $('cLSite').value };
+    if ($('cSchM').value === 'custom') { const { out, bad } = readSched($('cSched')); if (bad) { $('cErr').textContent = bad; return; } data.sched = { mode: 'custom', days: out }; }
+    else data.sched = { mode: 'global' };
+    try { await updateDoc(doc(db, 'employees', emp.id), data); $('cErr').textContent = ''; toast('ok', 'تم حفظ إعدادات ' + emp.name, data.sched.mode === 'custom' ? 'بدوام خاص بيه' : 'بالدوام العام', 'الإدارة'); }
+    catch (x) { $('cErr').textContent = errWhy(x); }
+  };
   $('shWatch').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { watch: !emp.watch }); closeSheet(); toast('ok', emp.watch ? 'اتشالت صلاحية المراقب من ' + emp.name : emp.name + ' بقى مراقب', emp.watch ? '' : 'هيظهرله تبويب «المتابعة» يشوف فيه الحضور والغياب وينزّل الكشوفات', 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحفظ'; } };
   const pp = inner.querySelector('.profpic[data-full]'); if (pp) pp.onclick = () => openViewer(pp.dataset.full);
   // كلمة السر: المالك يشوفها ويغيّرها
@@ -2154,7 +2234,7 @@ function openSheet(id) {
   $('shName').onchange = async e => { const nm = e.target.value.trim(); if (nm.length < 2) return; try { await updateDoc(doc(db, 'employees', emp.id), { name: nm }); toast('ok', 'تم تعديل الاسم', nm, 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحفظ'; } };
   // تحضير يدوي
   const paintTimes = () => {
-    const k = $('mDay').value || todayKey(), P = planKey(k), r = getRec(emp, k), fs = P.off ? ALL : P.fields;
+    const k = $('mDay').value || todayKey(), P = planKey(k, emp), r = getRec(emp, k), fs = P.off ? ALL : P.fields;
     $('mTimes').innerHTML = (P.off ? '<p class="muted small" style="grid-column:1/-1;margin:0">اليوم ده إجازة، وتقدر برضه تسجّل أوقات.</p>' : '') + fs.map(f => `<div class="fl"><label for="mt_${f}">${FL[f]}</label><input type="time" id="mt_${f}" data-f="${f}" value="${r && r[f] != null ? hhmm(r[f]) : ''}"></div>`).join('');
   };
   paintTimes(); $('mDay').onchange = paintTimes;
@@ -2166,7 +2246,7 @@ function openSheet(id) {
     catch (x) { $('shErr').textContent = errWhy(x); }
   };
   $('mSave').onclick = () => { const vals = {}; let bad = false; $('mTimes').querySelectorAll('input[type=time]').forEach(i => { const v = i.value ? fromHHMM(i.value) : null; if (i.value && v == null) bad = true; vals[i.dataset.f] = v; }); if (bad) { $('shErr').textContent = 'وقت غير صحيح'; return; } saveTimes(vals); };
-  $('mNow').onclick = () => { $('mDay').value = todayKey(); const r = getRec(emp, todayKey()), f = nextField(r, todayPlan()) || 'in'; saveTimes({ [f]: Math.floor(nowMin()) }).then(paintTimes); };
+  $('mNow').onclick = () => { $('mDay').value = todayKey(); const r = getRec(emp, todayKey()), f = nextField(r, todayPlan(emp)) || 'in'; saveTimes({ [f]: Math.floor(nowMin()) }).then(paintTimes); };
   $('shDel').onclick = async () => {
     const b = $('shDel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('trash', 14)} اضغط تاني للتأكيد`; setTimeout(() => { if (b.isConnected) { b.dataset.sure = ''; b.innerHTML = `${ic('trash', 14)} حذف الموظف`; } }, 4000); return; }
     try { await deleteDoc(doc(db, 'employees', emp.id)); deleteDoc(doc(db, 'live', emp.id)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف ' + emp.name, 'سجلات حضوره القديمة محفوظة في النسخة الاحتياطية', 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحذف'; }
@@ -2186,11 +2266,8 @@ function parseLatLng(s) {
   for (const p of pats) { const m = p.exec(s); if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat: +lat.toFixed(6), lng: +lng.toFixed(6) }; } }
   return null;
 }
-function renderSet() {
-  show('vSet');
-  const v = $('vSet');
-  const row = d => {
-    const c = dayCfg(d) || { on: false }; const two = c.s2 != null && c.e2 != null;
+function schedRowHTML(d, c) {
+    c = c || { on: false }; const two = c.s2 != null && c.e2 != null;
     return `<div class="sday ${c.on ? '' : 'isoff'}" data-d="${d}">
       <div class="sdh"><b>${DAYS[d]}</b><label class="switch sm"><input type="checkbox" data-k="on" ${c.on ? 'checked' : ''}><span>يوم عمل</span></label></div>
       <div class="sdb">
@@ -2198,7 +2275,36 @@ function renderSet() {
        <label class="switch sm"><input type="checkbox" data-k="two" ${two ? 'checked' : ''}><span>فترة ثانية (بعد البريك)</span></label>
        <div class="tp" data-two ${two ? '' : 'hidden'}><label>الفترة الثانية</label><div><input type="time" data-k="s2" value="${two ? hhmm(c.s2) : '16:00'}"><span>إلى</span><input type="time" data-k="e2" value="${two ? hhmm(c.e2) : '20:00'}"></div></div>
       </div></div>`;
+}
+function readSched(root) {
+  const out = {}; let bad = '';
+    root.querySelectorAll('.sday').forEach(el => {
+      const d = el.dataset.d, q = k => el.querySelector(`[data-k="${k}"]`);
+      if (!q('on').checked) { out[d] = { on: false }; return; }
+      const s1 = fromHHMM(q('s1').value), e1 = fromHHMM(q('e1').value);
+      if (s1 == null || e1 == null || e1 <= s1) { bad = bad || 'راجع مواعيد ' + DAYS[d] + ': نهاية الفترة لازم تكون بعد بدايتها'; return; }
+      const o = { on: true, s1, e1 };
+      if (q('two').checked) {
+        const s2 = fromHHMM(q('s2').value), e2 = fromHHMM(q('e2').value);
+        if (s2 == null || e2 == null || s2 <= e1 || e2 <= s2) { bad = bad || 'راجع الفترة الثانية يوم ' + DAYS[d] + ': لازم تبدأ بعد الفترة الأولى'; return; }
+        o.s2 = s2; o.e2 = e2;
+      }
+      if (s1 < 30) { bad = bad || 'بداية الدوام يوم ' + DAYS[d] + ' لازم تكون بعد ١٢:٣٠ ص'; return; }
+      out[d] = o;
+    });
+  return { out, bad };
+}
+function schedBind(root) {
+  root.onchange = e => {
+    const d = e.target.closest('.sday'); if (!d) return;
+    if (e.target.dataset.k === 'on') d.classList.toggle('isoff', !e.target.checked);
+    if (e.target.dataset.k === 'two') d.querySelector('[data-two]').hidden = !e.target.checked;
   };
+}
+function renderSet() {
+  show('vSet');
+  const v = $('vSet');
+  const row = d => schedRowHTML(d, dayCfg(d, null));
   v.innerHTML = `<button class="backbtn" id="setBack" type="button">${ic('back', 18)} رجوع للرئيسية</button>
   <section class="card reveal">
    <h2>فترات السماح والألوان</h2>
@@ -2288,21 +2394,7 @@ function renderSet() {
   };
   $('schReset').onclick = async () => { try { await setDoc(doc(db, 'settings', 'main'), { sched: DEF_SCHED }, { merge: true }); toast('ok', 'رجعت المواعيد الافتراضية', '', 'الإعدادات'); renderSet(); } catch (x) { $('schErr').textContent = 'تعذّر الحفظ'; } };
   $('schSave').onclick = async () => {
-    const out = {}; let bad = '';
-    sch.querySelectorAll('.sday').forEach(el => {
-      const d = el.dataset.d, q = k => el.querySelector(`[data-k="${k}"]`);
-      if (!q('on').checked) { out[d] = { on: false }; return; }
-      const s1 = fromHHMM(q('s1').value), e1 = fromHHMM(q('e1').value);
-      if (s1 == null || e1 == null || e1 <= s1) { bad = bad || 'راجع مواعيد ' + DAYS[d] + ': نهاية الفترة لازم تكون بعد بدايتها'; return; }
-      const o = { on: true, s1, e1 };
-      if (q('two').checked) {
-        const s2 = fromHHMM(q('s2').value), e2 = fromHHMM(q('e2').value);
-        if (s2 == null || e2 == null || s2 <= e1 || e2 <= s2) { bad = bad || 'راجع الفترة الثانية يوم ' + DAYS[d] + ': لازم تبدأ بعد الفترة الأولى'; return; }
-        o.s2 = s2; o.e2 = e2;
-      }
-      if (s1 < 30) { bad = bad || 'بداية الدوام يوم ' + DAYS[d] + ' لازم تكون بعد ١٢:٣٠ ص'; return; }
-      out[d] = o;
-    });
+    const { out, bad } = readSched(sch);
     if (bad) { $('schErr').textContent = bad; return; }
     try { await setDoc(doc(db, 'settings', 'main'), { sched: out }, { merge: true }); $('schErr').textContent = ''; toast('ok', 'تم حفظ مواعيد العمل', 'وصلت لكل الموظفين فوراً', 'الإعدادات'); }
     catch (x) { $('schErr').textContent = 'تعذّر الحفظ'; }
@@ -2444,7 +2536,7 @@ async function exportCsv() {
     const rows = [['الموظف', 'القسم', 'اسم المستخدم', 'التاريخ', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'الحالة', 'سبب التأخير', 'حي الإشراف']];
     const L = { g: 'في الموعد', y: 'متأخر', r: 'تأخير كبير' };
     emps.forEach(e => Object.keys(recs[e.id] || {}).sort().forEach(k => {
-      const r = getRec(e, k); if (!r) return; const P = planKey(k);
+      const r = getRec(e, k); if (!r) return; const P = planKey(k, e);
       const t = f => r[f] != null ? tm(r[f]) + (r.m[f] === 'auto' ? ' (تلقائي)' : r.m[f] === 'manual' ? ' (يدوي)' : '') : '';
       const lv = r.in != null ? lvlOf('in', r.in, P) : '';
       rows.push([e.name, e.dept, e.num, k, t('in'), t('out1'), t('in2'), t('out'), r.in == null ? 'نصف يوم' : r.in < (P.start || 0) ? 'بدري' : (L[lv] || ''), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
@@ -2511,7 +2603,7 @@ function onDays(snap) {
       [['note', 'الحضور'], ['note2', 'العودة']].forEach(([k, lb]) => { if (now[k] && (!was || was[k] !== now[k])) alertBoth('warn', `سبب تأخير ${e.name}`, `${lb}: ${now[k]}`, 'إشعار للمالك', 'late-' + d.uid + k, 'vOwn'); });
       ALL.forEach(f => {
         if (now[f] != null && (!was || was[f] == null) && now[f] >= nowMin() - 10) {
-          const late = (f === 'in' && !P.off && now.in > P.start + G) || (f === 'in2' && P.two && now.in2 > P.b2 + G);
+          const P = todayPlan(e), late = (f === 'in' && !P.off && now.in > P.start + G) || (f === 'in2' && P.two && now.in2 > P.b2 + brG());
           alertBoth(late ? 'warn' : 'ok', `${e.name} · ${FL[f]}${late ? ' متأخر' : ''}`, `${tm(now[f])} · بصمة ${MI[now.m[f]] ? MI[now.m[f]][1] : ''}${e.dept ? ' · ' + e.dept : ''}`, 'إشعار للمالك');
         }
       });
