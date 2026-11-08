@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=18';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=19';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -385,6 +385,7 @@ function show(id) {
   VIEWS.forEach(v => { $(v).hidden = v !== id; });
   view = id;
   $('chrome').hidden = id === 'vLogin';
+  document.body.classList.toggle('chatmode', id === 'vChat');
   const tabbed = ['vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vWatch'].includes(id);
   $('tabbar').hidden = !tabbed; document.body.classList.toggle('has-tabs', tabbed);
   if (tabbed) paintTabs();
