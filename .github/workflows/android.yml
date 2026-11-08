@@ -69,13 +69,15 @@ jobs:
           open(g, 'w', encoding='utf-8').write(b)
           PY
           rm -rf app/src/main/res/mipmap-anydpi-v26
-          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            n=${d%%:*}; px=${d##*:}
-            mkdir -p app/src/main/res/mipmap-$n
-            convert ../../logo-512.png -resize ${px}x${px} app/src/main/res/mipmap-$n/ic_launcher.png
-            cp app/src/main/res/mipmap-$n/ic_launcher.png app/src/main/res/mipmap-$n/ic_launcher_round.png
-            cp app/src/main/res/mipmap-$n/ic_launcher.png app/src/main/res/mipmap-$n/ic_launcher_foreground.png
-          done
+          python3 -c "import PIL" 2>/dev/null || pip3 install --quiet --break-system-packages pillow
+          python3 - <<'PY'
+          from PIL import Image
+          src = Image.open('../../logo-512.png').convert('RGBA')
+          for n, px in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
+              im = src.resize((px, px), Image.LANCZOS)
+              for f in ('ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground'):
+                  im.save('app/src/main/res/mipmap-%s/%s.png' % (n, f))
+          PY
 
       - name: Signing key (fixed, so updates install over the old app)
         run: |
