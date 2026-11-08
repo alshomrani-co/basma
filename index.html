@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=23">
+<link rel="manifest" href="manifest.json?v=25">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -771,6 +771,19 @@ body.chatmode .chatcard h2{margin-bottom:6px}
 .dchip{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;cursor:pointer;color:var(--muted);user-select:none}
 .dchip input{position:absolute;opacity:0;pointer-events:none}
 .dchip.on{background:rgba(47,138,61,.12);border-color:rgba(47,138,61,.4);color:#23763a;font-weight:600}
+
+/* أحجام الشات والقائمة */
+[data-chatfs="s"] .msg .txt{font-size:12.5px}[data-chatfs="l"] .msg .txt{font-size:16.5px}[data-chatfs="xl"] .msg .txt{font-size:19px}
+[data-tabfs="s"] .tabbar button{font-size:10.5px}[data-tabfs="l"] .tabbar button{font-size:14px}
+/* اختيار الأيقونات */
+.icrow{display:flex;gap:10px;align-items:flex-end;padding:6px 0;border-bottom:1px solid var(--line)}
+.icrow:last-child{border-bottom:0}.icrow .fl{flex:1;margin:0}
+.icpick{width:52px;height:52px;flex:none;border-radius:14px;border:1.5px dashed var(--gold);background:var(--gold-soft);color:var(--gold);display:grid;place-items:center;margin-bottom:4px}
+.icgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;max-height:52vh;overflow:auto;padding:2px}
+.icgrid button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.icgrid button svg{color:var(--gold)}.icgrid button small{font-size:11px;color:var(--muted)}
+.icgrid button.on{border-color:var(--gold);background:var(--gold-soft)}
+input[type=range]{width:100%;accent-color:var(--gold)}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -841,6 +854,6 @@ body.chatmode .chatcard h2{margin-bottom:6px}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=23"></script>
+<script type="module" src="app.js?v=25"></script>
 </body>
 </html>

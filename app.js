@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=23';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=25';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -18,7 +18,8 @@ let COMPANY = 'شركة سعد مفرح الشمراني للاستشارات ا
 const DEPTS0 = ['المساحة', 'المعماري', 'الإنشائي', 'السلامة', 'الثلاثي الأبعاد', 'المحاسب', 'الإشراف'];
 const deptList = () => (typeof settings !== 'undefined' && Array.isArray(settings.depts) && settings.depts.length) ? settings.depts : DEPTS0;
 // قواعد كل قسم: صورة مع الحضور، صورة مع اللايف، تسجيل من أي مكان
-const deptRule = name => { const r = (typeof settings !== 'undefined' && settings.deptRules && settings.deptRules[name]) || null; return r || (name === 'الإشراف' ? { punch: true, live: true, any: true } : { punch: false, live: false, any: false }); };
+// الافتراضي لو المدير ما حددش للموظف: الإشراف بصورة ومن أي مكان، والباقي من غير
+const deptRule = name => name === 'الإشراف' ? { punch: true, live: true, any: true } : { punch: false, live: false, any: false };
 const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const DAY_ORDER = [6, 0, 1, 2, 3, 4, 5];
 // مواعيد العمل الافتراضية (المالك يقدر يغيّرها من الإعدادات)
@@ -82,6 +83,32 @@ const I = {
   dots: "M5 12h.01M12 12h.01M19 12h.01",
   heart: "M12 20s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 5c-2.3 4.6-9.3 9-9.3 9z",
   users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M2 21a7 7 0 0 1 14 0M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-5-6.7",
+  calendar: "M7 3v4M17 3v4M4 9h16M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",
+  star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",
+  briefcase: "M4 8h16v11H4zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16",
+  building: "M5 21V4h10v17M15 9h4v12M9 8h2M9 12h2M9 16h2M3 21h18",
+  compass: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z",
+  navigation: "M3 11l18-8-8 18-2-8z",
+  shield: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z",
+  grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  list: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  message: "M4 5h16v11H8l-4 4z",
+  sliders: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
+  flag: "M5 21V4M5 4h12l-2 4 2 4H5",
+  target: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01",
+  route: "M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 17h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7",
+  truck: "M3 6h11v10H3zM14 10h4l3 3v3h-7M7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  ruler: "M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2",
+  layers: "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5",
+  inbox: "M4 13h5l1 3h4l1-3h5M5 5h14l1 8v6H4v-6z",
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5",
+  smile: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01",
+  award: "M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM8.5 14L7 22l5-3 5 3-1.5-8",
+  idcard: "M3 5h18v14H3zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM5 16a3 3 0 0 1 6 0M14 9h4M14 13h4",
+  fingerprint2: "M12 11v3a8 8 0 0 1-1.5 4.7M8 7.5A5 5 0 0 1 17 10v2M6 12v-2a6 6 0 0 1 .5-2.4M16 15.5a12 12 0 0 1-.8 3.5M9 13.5V11a3 3 0 0 1 6 0v1",
+  house2: "M3 11l9-8 9 8M5 9v12h14V9M10 21v-6h4v6",
+  pin2: "M12 21s-6-6.1-6-11a6 6 0 0 1 12 0c0 4.9-6 11-6 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -89,6 +116,8 @@ const I = {
   play: "M7 4v16l13-8z",
   pause: "M6 5h4v14H6zM14 5h4v14h-4z"
 };
+// أسماء للبحث عن الأيقونات بالعربي والإنجليزي
+const ICON_TAGS = { home: 'بيت رئيسية home', house2: 'بيت منزل رئيسية house', finger: 'بصمة اصبع finger', fingerprint2: 'بصمة اصبع fingerprint', check: 'تم تسجيل صح check', live: 'لايف بث مباشر live', map: 'خريطة map', pin: 'موقع مكان دبوس pin location', pin2: 'موقع مكان pin location', navigation: 'اتجاه ملاحة navigation gps', compass: 'بوصلة اتجاه compass', route: 'مسار طريق route', helmet: 'خوذة اشراف موقع helmet', truck: 'عربية نقل truck', chat: 'شات رسايل chat', message: 'رسالة شات message', mail: 'بريد ايميل mail', bell: 'جرس اشعارات bell', user: 'حسابي شخص ملف user profile', users: 'موظفين ناس users', idcard: 'بطاقة هوية ملف id card', eye: 'متابعة مشاهدة عين eye', gear: 'اعدادات ترس settings gear', sliders: 'اعدادات تحكم sliders', brush: 'تخصيص الوان فرشاة brush', palette: 'الوان palette', star: 'نجمة مميز star', heart: 'قلب heart', calendar: 'تقويم ايام calendar', clock: 'ساعة وقت clock', briefcase: 'شغل عمل شنطة briefcase', building: 'مبنى شركة building', shield: 'حماية امان shield', grid: 'شبكة grid', list: 'قائمة list', chart: 'تقارير رسم chart', file: 'ملف تقرير file', flag: 'علم flag', target: 'هدف target', ruler: 'مسطرة مساحة ruler', layers: 'طبقات layers', inbox: 'وارد inbox', search: 'بحث search', smile: 'ابتسامة smile', award: 'جايزة award', camera: 'كاميرا صورة camera', mosque: 'مسجد صلاة mosque', key: 'مفتاح كلمة سر key', megaphone: 'اعلان megaphone' };
 const ic = (n, s = 20, w = 1.8) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${I[n]}"/></svg>`;
 const MI = { tap: ['check', 'زرار'], face: ['face', 'الوجه'], finger: ['finger', 'البصمة'], manual: ['gear', 'المدير (يدوي)'], auto: ['clock', 'تلقائي'] };
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -425,10 +454,10 @@ function paintTabs() {
   const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
-  if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite') ? 'الإشراف' : tabs[i][2]))) {
+  if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite') ? T('tab_vLiveSup') : tabs[i][2]) && b.dataset.ic === ((tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite')) ? ((UI.icons && UI.icons.vLiveSup) || 'map') : tabs[i][1]))) {
     btns.forEach((b, i) => { const v = tabs[i][0]; b.setAttribute('aria-current', view === v ? 'page' : 'false'); b.querySelectorAll('.badge,.livedot').forEach(x => x.remove()); b.insertAdjacentHTML('beforeend', extra(v)); });
   } else {
-    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && siteRule(meEmp, 'liveSite') ? [v, 'helmet', 'الإشراف'] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
+    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && siteRule(meEmp, 'liveSite') ? [v, (UI.icons && UI.icons.vLiveSup) || 'map', T('tab_vLiveSup')] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" data-ic="${icn}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
   }
   tabIntro();
 }
@@ -506,6 +535,18 @@ function renderMsg(title, body) { show('vMsg'); $('msgTitle').textContent = titl
 
 /* ========== التخصيص: الألوان والنصوص (من غرفة التحكم) ========== */
 const FL_DEF = { ...FL };
+const TAB_IC0 = { vEmp: 'finger', vLive: 'live', vChat: 'chat', vMe: 'user', vWatch: 'eye', vOwn: 'home', vMap: 'map', vUi: 'brush', vSet: 'gear', vOwnV: 'home' };
+// تكبير وتصغير كل الكلام: بنضرب أحجام الخطوط في الـ CSS في نسبة
+const FS0 = new Map();
+function scaleFonts(k) {
+  try {
+    for (const sh of document.styleSheets) {
+      let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      const walk = rs => { for (const r of rs) { if (r.cssRules && !r.style) { walk(r.cssRules); continue; } if (!r.style) continue; if (r.cssRules) walk(r.cssRules); const f = FS0.has(r) ? FS0.get(r) : r.style.fontSize; if (!FS0.has(r)) FS0.set(r, f); const m = /^([\d.]+)px$/.exec(f || ''); if (m) r.style.fontSize = (Math.round(+m[1] * k * 10) / 10) + 'px'; } };
+      walk(rules);
+    }
+  } catch (e) { }
+}
 const COLOR_DEF = [
   ['primary', 'اللون الأساسي (الأزرار، القائمة، اللوجو)', '#d7262b'],
   ['dkBg1', 'خلفية الذكر (اللون الأول)', '#0f6b4f'],
@@ -526,16 +567,16 @@ const TEXT_DEF = [
   ['التأخير', [['lateMsg', 'رسالة الموظف المتأخر', 'اكتب سبب التأخير وهيوصل للمدير، أو كلّمه مباشرة، أو اكتب في الشات.'], ['lateReasons', 'أسباب جاهزة (افصل بينها بفاصلة)', 'زحمة طريق، ظرف عائلي، موعد طبي، كنت في موقع عمل']]],
   ['الصلاة', [['prayMsg', 'رسالة تذكير الصلاة', 'قم للوضوء 🕌']]],
   ['الشات', [['chatTitle', 'عنوان الشات', 'الشات الداخلي'], ['chatSub', 'وصف الشات', 'لكل موظفي الشركة']]],
-  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vMe', 'حسابي (الموظف)', 'حسابي'], ['tab_vWatch', 'المتابعة (المراقب)', 'المتابعة'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
+  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vMe', 'حسابي (الموظف)', 'حسابي'], ['tab_vLiveSup', 'اللايف لموظف الصورة', 'الخريطة'], ['segVisits', 'زرار الإشراف في خريطة المدير', 'الإشراف'], ['tab_vWatch', 'المتابعة (المراقب)', 'المتابعة'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
 ];
 const TXT0 = Object.fromEntries(TEXT_DEF.flatMap(g => g[1]).map(x => [x[0], x[2]]));
-const OPT0 = { dhikrOn: true, dhikrSize: 'm', dhikrShine: true, noticeOn: false, notice: '', prayOn: true };
-let UI = { colors: {}, texts: {}, opts: { ...OPT0 } }, uiDirty = false;
+const OPT0 = { dhikrOn: true, dhikrSize: 'm', dhikrShine: true, noticeOn: false, notice: '', prayOn: true, fontScale: 100, chatFs: 'm', tabFs: 'm' };
+let UI = { colors: {}, texts: {}, opts: { ...OPT0 }, icons: {} }, uiDirty = false;
 const T = k => { const v = UI.texts[k]; return (v != null && String(v).trim() !== '') ? String(v) : TXT0[k]; };
 const hexA = (h, a) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return null; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 function applyUI(u, keepLocal) {
   u = u && typeof u === 'object' ? u : {};
-  UI = { colors: { ...(u.colors || {}) }, texts: { ...(u.texts || {}) }, opts: { ...OPT0, ...(u.opts || {}) } };
+  UI = { colors: { ...(u.colors || {}) }, texts: { ...(u.texts || {}) }, opts: { ...OPT0, ...(u.opts || {}) }, icons: { ...(u.icons || {}) } };
   if (!keepLocal) try { localStorage.setItem('sh-ui', JSON.stringify(UI)); } catch (e) { }
   const st = document.documentElement.style, c = UI.colors;
   const set = (v, x) => x ? st.setProperty(v, x) : st.removeProperty(v);
@@ -546,8 +587,10 @@ function applyUI(u, keepLocal) {
   document.documentElement.dataset.dk = UI.opts.dhikrSize; document.documentElement.dataset.dkShine = UI.opts.dhikrShine ? '1' : '0';
   COMPANY = T('company');
   Object.keys(FL_DEF).forEach(f => FL[f] = T('fl_' + f));
-  [TABS_EMP, TABS_OWN].forEach(a => a.forEach(t => t[2] = T('tab_' + t[0])));
-  TABS_VIEW.forEach(t => t[2] = T(t[0] === 'vOwn' ? 'tab_vOwnV' : 'tab_' + t[0]));
+  [TABS_EMP, TABS_OWN].forEach(a => a.forEach(t => { t[2] = T('tab_' + t[0]); t[1] = UI.icons[t[0]] || TAB_IC0[t[0]] || t[1]; }));
+  TABS_VIEW.forEach(t => { t[2] = T(t[0] === 'vOwn' ? 'tab_vOwnV' : 'tab_' + t[0]); t[1] = UI.icons[t[0] === 'vOwn' ? 'vOwnV' : t[0]] || TAB_IC0[t[0]] || t[1]; });
+  scaleFonts((+UI.opts.fontScale || 100) / 100);
+  document.documentElement.dataset.chatfs = UI.opts.chatFs || 'm'; document.documentElement.dataset.tabfs = UI.opts.tabFs || 'm';
   const ls = $('lgSub'); if (ls) ls.textContent = T('loginSub');
   const wd = $('wDhikr'); if (wd) { wd.innerHTML = dhikrInner(); wd.hidden = !UI.opts.dhikrOn; }
   const wc = $('wCo'); if (wc) wc.textContent = T('welcomeSub');
@@ -1355,7 +1398,22 @@ function runFail(msg) {
   $('hint').textContent = msg;
   setTimeout(() => { scan.classList.remove('fail'); $('prog').style.strokeDashoffset = 100; }, 700);
 }
-function getGeo() {
+// تحديد دقيق: بنستنى لحد ما الدقة توصل ٢٠ متر أو أقل (أقصى حاجة ١٠ ثواني) وناخد أحسن قراءة
+function getGeo(maxWait = 10000) {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('nogeo'));
+    let best = null, done = false, wid = null;
+    const fin = () => { if (done) return; done = true; try { navigator.geolocation.clearWatch(wid); } catch (e) { } if (best) { try { localStorage.setItem('sh-lastgeo', JSON.stringify({ lat: best.lat, lng: best.lng })); } catch (e) { } res(best); } else rej(lastErr || new Error('nofix')); };
+    let lastErr = null;
+    wid = navigator.geolocation.watchPosition(p => {
+      const g = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy) };
+      if (!best || g.acc < best.acc) best = g;
+      if (best.acc <= 20) fin();
+    }, e => { lastErr = e; if (e && e.code === 1) fin(); }, { enableHighAccuracy: true, timeout: maxWait, maximumAge: 0 });
+    setTimeout(fin, maxWait);
+  });
+}
+function getGeoOld() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) return rej(new Error('nogeo'));
     navigator.geolocation.getCurrentPosition(p => { const g = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), acc: Math.round(p.coords.accuracy) }; try { localStorage.setItem('sh-lastgeo', JSON.stringify({ lat: g.lat, lng: g.lng })); } catch (e) { } res(g); }, rej, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
@@ -1474,7 +1532,7 @@ function renderLive() {
   show('vLive');
   const v = $('vLive');
   v.innerHTML = `<section class="card reveal">
-    <h2>${siteRule(meEmp, 'liveSite') ? 'الإشراف · ' : ''}موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
+    <h2>موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
     <p class="muted small" style="margin:0 0 12px">${siteRule(meEmp, 'liveSite') ? 'لازم صورة الموقع واسم الحي قبل ما يبدأ اللايف' + (siteRule(meEmp, 'punchSite') ? ' أو يتسجّل الحضور' : '') + (isSup(meEmp) ? '. تقدر تسجّل من أي مكان على الخريطة.' : '.') : 'لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.'}</p>
     <div class="map" id="myMap"></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
@@ -1532,12 +1590,12 @@ async function startLive(resume) {
   if (st) saveVisit(st, 'live', mid).catch(() => { });
   if (NATIVE && BGeo) {
     try {
-      bgWatch = await BGeo.addWatcher({ backgroundTitle: 'اللايف لوكيشن شغّال', backgroundMessage: 'المالك شايف مكانك · افتح التطبيق عشان توقف المشاركة', requestPermissions: true, stale: false, distanceFilter: 10 }, (loc, err) => {
+      bgWatch = await BGeo.addWatcher({ backgroundTitle: 'اللايف لوكيشن شغّال', backgroundMessage: 'المالك شايف مكانك · افتح التطبيق عشان توقف المشاركة', requestPermissions: true, stale: false, distanceFilter: 5 }, (loc, err) => {
         if (err) { if (err.code === 'NOT_AUTHORIZED') { toast('bad', 'اسمح للتطبيق باستخدام الموقع', 'من الإعدادات: الموقع ← السماح طوال الوقت', 'موقعي المباشر'); BGeo.openSettings().catch(() => { }); } return; }
         if (loc) onFix({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed } });
       });
-    } catch (e) { watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
-  } else watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+    } catch (e) { watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }); }
+  } else watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   keepAwake(); toast('live', 'بدأت مشاركة موقعك', 'المالك يقدر يشوف مكانك الآن', 'موقعي المباشر');
   if (view === 'vLive') renderLive(); paintTabs();
   onFix({ coords: { latitude: g0.lat, longitude: g0.lng, accuracy: g0.acc, speed: null } });
@@ -1553,6 +1611,8 @@ async function stopLive(user) {
 }
 async function onFix(pos) {
   const p = { lat: +pos.coords.latitude.toFixed(6), lng: +pos.coords.longitude.toFixed(6), acc: Math.round(pos.coords.accuracy), spd: pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : null, t: Date.now() };
+  // تجاهل القراءات الضعيفة لو عندنا قراءة أدق من قريب
+  if (lastFix && p.acc > 80 && lastFix.acc < p.acc && (Date.now() - (lastFix.t || 0)) < 60000) return;
   lastFix = p;
   const moved = lastSent ? distM(lastSent, p) : Infinity, since = Date.now() - lastSentAt;
   if (moved >= 20 || since >= 30000) {
@@ -1570,7 +1630,7 @@ async function keepAwake() { try { if ('wakeLock' in navigator && document.visib
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (view === 'vChat') markChatRead();
-    if (liveOn) { keepAwake(); if (watchId == null && bgWatch == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
+    if (liveOn) { keepAwake(); if (watchId == null && bgWatch == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }); }
     checkEmpReminders(); checkOwnerAlerts(); checkPrayer();
   }
 });
@@ -1698,7 +1758,7 @@ function renderMap() {
   let vSeen = 0; try { vSeen = +(localStorage.getItem('sh-vseen-' + me.uid) || 0); } catch (e) { }
   if (mapTab === 'visits') { vSeen = Date.now(); try { localStorage.setItem('sh-vseen-' + me.uid, String(vSeen)); } catch (e) { } }
   const todayN = visits.filter(x => x.day === todayIdx() && x.atMs > vSeen).length, onN = Object.values(lives).filter(online).length;
-  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('map', 16)} الخريطة المباشرة${onN ? ` <i class="onl"><b></b>${ar(onN)} online</i>` : ''}</button><button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic('helmet', 16)} الإشراف${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button></div>`;
+  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('map', 16)} الخريطة المباشرة${onN ? ` <i class="onl"><b></b>${ar(onN)} online</i>` : ''}</button><button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic((UI.icons && UI.icons.segVisits) || 'helmet', 16)} ${esc(T('segVisits'))}${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button></div>`;
   if (mapTab === 'visits') {
     v.innerHTML = seg + `<section class="card reveal" style="margin-top:12px">
       <h2>تسجيلات قسم الإشراف <span class="muted small" id="vsCount" style="font-family:var(--f-body)"></span></h2>
@@ -2179,11 +2239,10 @@ function openSheet(id) {
      <b class="gt">${ic('gear', 16)} التحكم في الموظف</b>
      <div class="ggrid" style="margin-top:8px">
       <div class="fl"><label for="cMeth">طريقة التسجيل</label><select id="cMeth">${[['both', 'زرار + بصمة إصبع'], ['tap', 'زرار بس'], ['finger', 'بصمة إصبع بس']].map(([v, l]) => `<option value="${v}" ${methodOf(emp) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="fl"><label for="cPSite">صورة الموقع مع الحضور</label><select id="cPSite">${[['auto', 'حسب القسم'], ['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(emp.punchSite || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="fl"><label for="cLSite">صورة الموقع مع اللايف</label><select id="cLSite">${[['auto', 'حسب القسم'], ['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(emp.liveSite || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="fl"><label for="cPSite">صورة الموقع مع الحضور</label><select id="cPSite">${[['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(siteRule(emp, 'punchSite') ? 'on' : 'off') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="fl"><label for="cLSite">صورة الموقع مع اللايف</label><select id="cLSite">${[['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(siteRule(emp, 'liveSite') ? 'on' : 'off') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="fl"><label for="cSchM">الدوام</label><select id="cSchM"><option value="global" ${!(emp.sched && emp.sched.mode === 'custom') ? 'selected' : ''}>الدوام العام للشركة</option><option value="custom" ${emp.sched && emp.sched.mode === 'custom' ? 'selected' : ''}>دوام خاص بيه</option></select></div>
      </div>
-     <p class="muted small" style="margin:2px 0 0">«حسب القسم»: بيمشي على إعدادات قسم ${esc(emp.dept || '')} (الإعدادات ← الأقسام): ${deptRule(emp.dept).punch ? 'صورة مع الحضور' : 'من غير صورة مع الحضور'} · ${deptRule(emp.dept).live ? 'صورة مع اللايف' : 'من غير صورة مع اللايف'}.</p>
      <div class="schsum" id="cSchSum">${schedSummary(emp)}</div>
      <div id="cSchBox" ${emp.sched && emp.sched.mode === 'custom' ? '' : 'hidden'}>
       <div class="row-btns" style="margin:10px 0 8px"><button class="btn ghost" type="button" id="cSchCopy">${ic('restart', 14)} انسخ الدوام العام</button><button class="btn ghost" type="button" id="cSchOne">${ic('coffee', 14)} إلغاء البريك (دوام واحد)</button></div>
@@ -2370,7 +2429,7 @@ function renderSet() {
   </section>
   <section class="card reveal" style="margin-top:16px">
    <h2>${ic('users', 18)} الأقسام</h2>
-   <p class="muted small" style="margin:0 0 10px">ضيف أو غيّر اسم أو امسح قسم، وحدد لكل قسم: صورة الموقع مع الحضور، وصورة الموقع مع اللايف، والتسجيل من أي مكان. أي موظف ممكن يكون له إعداد خاص بيه من صفحته.</p>
+   <p class="muted small" style="margin:0 0 10px">ضيف أو غيّر اسم أو امسح قسم. صورة الموقع والتسجيل بتتحدد لكل موظف من صفحته.</p>
    <div id="deptList"></div>
    <form class="form inl" id="deptAdd" novalidate style="margin-top:10px"><div class="fl" style="flex:1"><label for="dNew">قسم جديد</label><input id="dNew" maxlength="30" placeholder="مثلاً: مهندس موقع"></div><button class="btn primary" type="submit">${ic('plus', 16)} إضافة</button></form>
    <div class="err" id="dErr"></div>
@@ -2501,6 +2560,20 @@ function bindViewers() {
 
 /* ----- صفحة التخصيص ----- */
 let uiDraft = null;
+const ICON_DEF = { vLiveSup: 'map', segVisits: 'helmet' };
+const ICON_SLOTS = [['vEmp', 'tab_vEmp', 'البصمة (الموظف)'], ['vLive', 'tab_vLive', 'موقعي المباشر (الموظف)'], ['vLiveSup', 'tab_vLiveSup', 'الخريطة (موظف الصورة)'], ['vChat', 'tab_vChat', 'الشات'], ['vMe', 'tab_vMe', 'حسابي (الموظف)'], ['vWatch', 'tab_vWatch', 'المتابعة (المراقب)'], ['vOwn', 'tab_vOwn', 'الرئيسية (المدير)'], ['vMap', 'tab_vMap', 'الخريطة (المدير)'], ['segVisits', 'segVisits', 'زرار الإشراف في الخريطة'], ['vUi', 'tab_vUi', 'التخصيص'], ['vSet', 'tab_vSet', 'الإعدادات'], ['vOwnV', 'tab_vOwnV', 'الحضور (حساب المتابعة)']];
+function openIconPicker(slot, cur, onPick) {
+  const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
+  const names = Object.keys(ICON_TAGS);
+  inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--gold);color:#fff">${ic(cur, 22)}</div><b>اختار أيقونة</b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    <div class="fl"><label for="icQ">بحث</label><input id="icQ" placeholder="مثلاً: خريطة، بصمة، شات، موقع"></div>
+    <div class="icgrid" id="icGrid"></div>`;
+  const paint = () => { const q = $('icQ').value.trim().toLowerCase(); const list = names.filter(n => !q || ICON_TAGS[n].toLowerCase().includes(q) || n.includes(q)); $('icGrid').innerHTML = list.length ? list.map(n => `<button type="button" data-ic="${n}" class="${n === cur ? 'on' : ''}" title="${esc(ICON_TAGS[n].split(' ')[0])}">${ic(n, 26, 1.8)}<small>${esc(ICON_TAGS[n].split(' ')[0])}</small></button>`).join('') : '<p class="muted small">مفيش أيقونة بالاسم ده</p>'; };
+  paint(); $('icQ').oninput = paint;
+  $('icGrid').onclick = e => { const b = e.target.closest('[data-ic]'); if (!b) return; onPick(b.dataset.ic); closeSheet(); };
+  sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+}
 function renderUi() {
   show('vUi'); uiDraft = JSON.parse(JSON.stringify(UI)); uiDirty = false;
   const v = $('vUi'), d = uiDraft;
@@ -2514,6 +2587,16 @@ function renderUi() {
    <div class="fl" style="margin-top:10px"><label>حجم الذكر</label><div class="seg" id="o_size">${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير']].map(([k, l]) => `<button type="button" data-s="${k}" class="${d.opts.dhikrSize === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
    ${txtRow(TEXT_DEF[0][1][0])}
    ${COLOR_DEF.filter(x => x[0].startsWith('dk')).map(colRow).join('')}
+  </section>
+  <section class="card reveal" style="margin-top:16px"><h2>${ic('search', 18)} حجم الكلام</h2>
+   <div class="fl"><label for="o_fs">حجم كل الكلام في التطبيق: <b id="o_fsv">${ar(d.opts.fontScale || 100)}٪</b></label><input type="range" id="o_fs" min="80" max="140" step="5" value="${d.opts.fontScale || 100}"></div>
+   <div class="row-btns" style="margin:-4px 0 10px"><button type="button" class="btn ghost sm" id="o_fsm">أصغر −</button><button type="button" class="btn ghost sm" id="o_fs0">الحجم الأصلي</button><button type="button" class="btn ghost sm" id="o_fsp">أكبر +</button></div>
+   <div class="fl"><label>حجم كلام الشات</label><div class="seg" id="o_chatfs">${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير'], ['xl', 'كبير جداً']].map(([k, l]) => `<button type="button" data-v="${k}" class="${(d.opts.chatFs || 'm') === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+   <div class="fl"><label>حجم أسماء القائمة اللي تحت</label><div class="seg" id="o_tabfs">${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير']].map(([k, l]) => `<button type="button" data-v="${k}" class="${(d.opts.tabFs || 'm') === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+  </section>
+  <section class="card reveal" style="margin-top:16px"><h2>${ic('grid', 18)} أيقونات وأسماء القائمة</h2>
+   <p class="muted small" style="margin:0 0 8px">دوس على الأيقونة عشان تختار شكل تاني، واكتب الاسم اللي يظهر تحتها.</p>
+   <div id="icRows">${ICON_SLOTS.map(([id, tk, lbl]) => `<div class="icrow"><button type="button" class="icpick" data-slot="${id}" aria-label="تغيير أيقونة ${lbl}">${ic(d.icons[id] || TAB_IC0[id] || ICON_DEF[id], 24, 1.9)}</button><div class="fl"><label for="t_${tk}">${lbl}</label><input id="t_${tk}" data-t="${tk}" placeholder="${esc(TXT0[tk])}" value="${esc(d.texts[tk] || '')}"></div></div>`).join('')}</div>
   </section>
   <section class="card reveal" style="margin-top:16px"><h2>${ic('mosque', 18)} مواقيت الصلاة</h2>
    <label class="switch"><input type="checkbox" id="o_prayOn" ${d.opts.prayOn !== false ? 'checked' : ''}><span>إظهار المواقيت وتذكير قبل الأذان بـ ٥ دقائق</span></label>
@@ -2543,6 +2626,10 @@ function renderUi() {
   v.querySelectorAll('[data-t]').forEach(i => i.oninput = () => { const t = i.value; if (t.trim()) uiDraft.texts[i.dataset.t] = t; else delete uiDraft.texts[i.dataset.t]; dirty(); });
   ['dhikrOn', 'dhikrShine', 'noticeOn', 'prayOn'].forEach(k => $('o_' + k).onchange = e => { uiDraft.opts[k] = e.target.checked; dirty(); });
   $('o_notice').oninput = e => { uiDraft.opts.notice = e.target.value; dirty(); };
+  const setFs = vv => { vv = Math.max(80, Math.min(140, vv)); uiDraft.opts.fontScale = vv; $('o_fs').value = vv; $('o_fsv').textContent = ar(vv) + '٪'; dirty(); };
+  $('o_fs').oninput = e => setFs(+e.target.value); $('o_fsm').onclick = () => setFs((+uiDraft.opts.fontScale || 100) - 5); $('o_fsp').onclick = () => setFs((+uiDraft.opts.fontScale || 100) + 5); $('o_fs0').onclick = () => setFs(100);
+  [['o_chatfs', 'chatFs'], ['o_tabfs', 'tabFs']].forEach(([id, k]) => $(id).onclick = e => { const b = e.target.closest('[data-v]'); if (!b) return; uiDraft.opts[k] = b.dataset.v; $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); dirty(); });
+  $('icRows').addEventListener('click', e => { const b = e.target.closest('.icpick'); if (!b) return; const slot = b.dataset.slot; openIconPicker(slot, uiDraft.icons[slot] || TAB_IC0[slot] || ICON_DEF[slot], n => { uiDraft.icons[slot] = n; b.innerHTML = ic(n, 24, 1.9); dirty(); }); });
   $('o_size').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; uiDraft.opts.dhikrSize = b.dataset.s; $('o_size').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); dirty(); };
   $('uiCancel').onclick = () => { uiDirty = false; applyUI(settings.ui); renderUi(); toast('info', 'اتلغت التعديلات', '', 'التخصيص'); };
   $('uiSave').onclick = async () => {
@@ -2552,7 +2639,7 @@ function renderUi() {
   };
   $('uiReset').onclick = async () => {
     const b = $('uiReset'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('alert', 16)} اضغط تاني للتأكيد`; setTimeout(() => { if (b.isConnected) { b.dataset.sure = ''; b.innerHTML = `${ic('restart', 16)} رجوع لكل الإعدادات الأصلية`; } }, 4000); return; }
-    try { await setDoc(doc(db, 'settings', 'main'), { ui: { colors: {}, texts: {}, opts: { ...OPT0 } } }, { mergeFields: ['ui'] }); uiDirty = false; applyUI(null); renderUi(); toast('ok', 'رجعت الإعدادات الأصلية', '', 'التخصيص'); }
+    try { await setDoc(doc(db, 'settings', 'main'), { ui: { colors: {}, texts: {}, opts: { ...OPT0 }, icons: {} } }, { mergeFields: ['ui'] }); uiDirty = false; applyUI(null); renderUi(); toast('ok', 'رجعت الإعدادات الأصلية', '', 'التخصيص'); }
     catch (x) { toast('bad', 'تعذّر الحفظ', errWhy(x), 'التخصيص'); }
   };
 }
@@ -2562,7 +2649,7 @@ function paintDepts() {
   const el = $('deptList'); if (!el) return;
   el.innerHTML = deptList().map((d, i) => { const r = deptRule(d), n = emps.filter(e => e.dept === d).length; return `<div class="drow" data-i="${i}">
     <div class="dh"><input class="dname" data-old="${esc(d)}" value="${esc(d)}" maxlength="30" aria-label="اسم القسم"><span class="muted small">${ar(n)} موظف</span><button class="navb" type="button" data-ddel="${esc(d)}" aria-label="مسح القسم">${ic('trash', 15)}</button></div>
-    <div class="dt">${[['punch', 'camera', 'صورة مع الحضور'], ['live', 'live', 'صورة مع اللايف'], ['any', 'pin', 'من أي مكان']].map(([k, icn, l]) => `<label class="dchip ${r[k] ? 'on' : ''}"><input type="checkbox" data-drk="${k}" data-dn="${esc(d)}" ${r[k] ? 'checked' : ''}>${ic(icn, 14)} ${l}</label>`).join('')}</div></div>`; }).join('');
+</div>`; }).join('');
 }
 async function saveDepts(list, rules, msg) {
   try { await setDoc(doc(db, 'settings', 'main'), { depts: list, deptRules: rules }, { merge: true }); if (msg) toast('ok', msg, '', 'الأقسام'); $('dErr').textContent = ''; }
