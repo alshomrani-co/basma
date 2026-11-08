@@ -26,6 +26,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
       - name: Create Capacitor project
         run: |
           mkdir app && cd app
