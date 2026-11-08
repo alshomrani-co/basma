@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=16';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=18';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -76,6 +76,8 @@ const I = {
   left: "M15 6l-6 6 6 6",
   user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0",
   mail: "M3 6h18v12H3zM3 7l9 6 9-6",
+  dots: "M5 12h.01M12 12h.01M19 12h.01",
+  heart: "M12 20s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 5c-2.3 4.6-9.3 9-9.3 9z",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -197,7 +199,7 @@ function docToRec(d) {
 function empFromDoc(s) {
   const d = s.data();
   const created = d.createdAt && d.createdAt.toMillis ? keyOfIdx(dayIdx(d.createdAt.toMillis())) : todayKey();
-  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', emergency: d.emergency || '', about: d.about || '' };
+  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', watch: !!d.watch, profileDone: !!d.profileDone, emergency: d.emergency || '', about: d.about || '' };
 }
 
 /* ========== day logic ========== */
@@ -340,12 +342,22 @@ async function sysNotify(title, body, tag, go) {
     if (reg) reg.showNotification(title, opt); else new Notification(title, opt);
   } catch (e) { }
 }
-function alertBoth(kind, title, body, who, tag, go) { toast(kind, title, body, who, go); sysNotify(title, body, tag, go || TAB_OF[kind]); pushLog(kind, title, body, go || TAB_OF[kind]); }
+const notifCat = (kind, tag) => kind === 'pray' ? 'pray' : kind === 'salawat' ? 'salawat' : kind === 'chat' || tag === 'chat' ? 'chat' : 'att';
+const NP0 = { att: true, chat: true, pray: true, salawat: true };
+function notifPrefs() { try { return { ...NP0, ...JSON.parse(localStorage.getItem('sh-np-' + (me ? me.uid : 'x')) || '{}') }; } catch (e) { return { ...NP0 }; } }
+function setNotifPref(k, v) { const p = notifPrefs(); p[k] = v; try { localStorage.setItem('sh-np-' + (me ? me.uid : 'x'), JSON.stringify(p)); } catch (e) { } nativeSchedule(); }
+function alertBoth(kind, title, body, who, tag, go) {
+  const cat = notifCat(kind, tag), on = notifPrefs()[cat] !== false;
+  if (on || cat === 'att') toast(kind === 'salawat' ? 'ok' : kind, title, body, who, go);
+  // في تطبيق الأندرويد: الصلاة والصلاة على النبي متجدولين على الجوال نفسه، فمش بنكررهم
+  if (on && !(NATIVE && (cat === 'pray' || cat === 'salawat'))) sysNotify(title, body, tag, go || TAB_OF[kind]);
+  pushLog(kind === 'salawat' ? 'ok' : kind, title, body, go || TAB_OF[kind]);
+}
 // فتح صفحة معيّنة من إشعار (داخل التطبيق أو من إشعار الجوال)
 function goTo(target) {
   if (!target || !me) return;
   const [tab, id] = String(target).split(':');
-  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat', 'vMe'];
+  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat', 'vMe', ...(isWatch ? ['vWatch'] : [])];
   if (!ok.includes(tab)) return;
   if (tab === 'vMap' && id === 'visits') { mapTab = 'visits'; if (view === 'vMap') renderMap(); else openTab('vMap'); return; }
   if (tab === 'vMap' && mapTab !== 'live') { mapTab = 'live'; if (view === 'vMap') renderMap(); }
@@ -362,7 +374,8 @@ function tickClock() { $('bigClock').textContent = new Date().toLocaleTimeString
 function setDates() { const d = new Date(); $('gDate').textContent = gNow.format(d); $('hDate').textContent = hNow.format(d) + ' هـ'; }
 
 /* ========== views + tab bar ========== */
-const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vSetup'];
+const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vSetup', 'vWatch'];
+let isWatch = false, wEmps = [], watchUnsubs = [], wDay = null;
 const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات'], ['vMe', 'user', 'حسابي']];
 const TABS_VIEW = [['vOwn', 'home', 'الحضور'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات']];
 const TABS_OWN = [['vOwn', 'home', 'الرئيسية'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات'], ['vUi', 'brush', 'التخصيص'], ['vSet', 'gear', 'الإعدادات']];
@@ -372,7 +385,7 @@ function show(id) {
   VIEWS.forEach(v => { $(v).hidden = v !== id; });
   view = id;
   $('chrome').hidden = id === 'vLogin';
-  const tabbed = ['vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe'].includes(id);
+  const tabbed = ['vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vWatch'].includes(id);
   $('tabbar').hidden = !tabbed; document.body.classList.toggle('has-tabs', tabbed);
   if (tabbed) paintTabs();
   if (id === 'vChat') { markChatRead(); }
@@ -386,7 +399,7 @@ function tabIntro() {
   setTimeout(() => tb.classList.remove('intro'), 5500);
 }
 function paintTabs() {
-  const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : TABS_EMP, tb = $('tabbar');
+  const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : (isWatch ? [TABS_EMP[0], ['vWatch', 'eye', T('tab_vWatch')], ...TABS_EMP.slice(1)] : TABS_EMP), tb = $('tabbar');
   const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
@@ -400,7 +413,7 @@ function paintTabs() {
 $('tabbar').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; vibrate(10); openTab(b.dataset.tab); };
 function openTab(v) {
   if (v === view) return;
-  if (v === 'vEmp') renderEmp(); else if (v === 'vOwn') renderOwner(); else if (v === 'vLive') renderLive(); else if (v === 'vMap') renderMap(); else if (v === 'vChat') renderChat(); else if (v === 'vSet') renderSet(); else if (v === 'vUi') renderUi(); else if (v === 'vMe') renderMe();
+  if (v === 'vEmp') renderEmp(); else if (v === 'vOwn') renderOwner(); else if (v === 'vLive') renderLive(); else if (v === 'vMap') renderMap(); else if (v === 'vChat') renderChat(); else if (v === 'vSet') renderSet(); else if (v === 'vUi') renderUi(); else if (v === 'vMe') renderMe(); else if (v === 'vWatch') renderWatch();
   scrollTo({ top: 0, behavior: RM ? 'auto' : 'smooth' });
 }
 
@@ -491,7 +504,7 @@ const TEXT_DEF = [
   ['التأخير', [['lateMsg', 'رسالة الموظف المتأخر', 'اكتب سبب التأخير وهيوصل للمدير، أو كلّمه مباشرة، أو اكتب في الشات.'], ['lateReasons', 'أسباب جاهزة (افصل بينها بفاصلة)', 'زحمة طريق، ظرف عائلي، موعد طبي، كنت في موقع عمل']]],
   ['الصلاة', [['prayMsg', 'رسالة تذكير الصلاة', 'قم للوضوء 🕌']]],
   ['الشات', [['chatTitle', 'عنوان الشات', 'الشات الداخلي'], ['chatSub', 'وصف الشات', 'لكل موظفي الشركة']]],
-  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vMe', 'حسابي (الموظف)', 'حسابي'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
+  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vMe', 'حسابي (الموظف)', 'حسابي'], ['tab_vWatch', 'المتابعة (المراقب)', 'المتابعة'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
 ];
 const TXT0 = Object.fromEntries(TEXT_DEF.flatMap(g => g[1]).map(x => [x[0], x[2]]));
 const OPT0 = { dhikrOn: true, dhikrSize: 'm', dhikrShine: true, noticeOn: false, notice: '', prayOn: true };
@@ -696,12 +709,13 @@ function renderEmp() {
 function bindLateCard() { const c = $('lateCard'); if (c) c.onclick = () => { const L = lateInfo(); if (L) openLateSheet(L.f, L.by); }; }
 function paintLateSlot() { const sl = $('lateSlot'); if (!sl) return; const h = lateCardHTML(); if (sl.dataset.h !== h) { sl.dataset.h = h; sl.innerHTML = h; bindLateCard(); } }
 function notifCta() {
+  if (NATIVE) return `<button class="btn ghost" id="notifBtn" style="max-width:380px;width:100%" hidden>${ic('bell', 16)} فعّل الإشعارات عشان توصلك التنبيهات</button>`;
   const p = ('Notification' in window) ? Notification.permission : 'unsupported';
   if (p === 'default') return `<button class="btn ghost" id="notifBtn" style="max-width:380px;width:100%">${ic('bell', 16)} فعّل الإشعارات عشان توصلك التنبيهات</button>`;
   if (p === 'denied') return `<p class="muted small" style="text-align:center">الإشعارات مقفولة، فعّلها من إعدادات المتصفح عشان توصلك التنبيهات</p>`;
   return '';
 }
-function bindNotifCta() { const nb = $('notifBtn'); if (nb) nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } nb.remove(); }; }
+function bindNotifCta() { const nb = $('notifBtn'); if (!nb) return; if (NATIVE) notifState().then(st => { nb.hidden = st === 'granted'; }); nb.onclick = async () => { await enableNotifs(); nb.remove(); }; }
 const myRec = () => getRec(meEmp, todayKey());
 function updateEmpLive(full) {
   if (view !== 'vEmp' || !meEmp) return;
@@ -833,6 +847,75 @@ function paintPray() {
   el.innerHTML = PRAYERS.map(([k]) => `<div class="pr${nx && nx[0] === k ? ' next' : t[k] <= n ? ' past' : ''}"><small>${prayName(k, dow)}</small><b class="num">${tm(t[k])}</b></div>`).join('') +
     (nx ? `<div class="prnext">${ic('mosque', 14)} ${prayName(nx[0], dow)} بعد ${dur(Math.max(1, Math.ceil(t[nx[0]] - n)))}</div>` : '');
 }
+const SALAWAT_T = 'صلِّ على سيدنا محمد ﷺ', SALAWAT_B = 'اللهم صلِّ وسلّم وبارك على نبينا محمد';
+function checkSalawat() {
+  if (!me || notifPrefs().salawat === false) return;
+  const n = nowMin(), h = Math.floor(n / 60), m = n - h * 60, id = todayKey() + 'sal-' + h;
+  if (h >= 7 && h <= 23 && m < 3 && !notified.has(id)) { notified.add(id); alertBoth('salawat', SALAWAT_T, SALAWAT_B, 'تذكير', 'salawat', ''); }
+}
+// تطبيق الأندرويد: جدولة الإشعارات على الجوال نفسه، عشان توصل حتى والتطبيق مقفول
+let natSchedT = null;
+function nativeSchedule() {
+  if (!NATIVE || !LNot || !me) return;
+  clearTimeout(natSchedT);
+  natSchedT = setTimeout(async () => {
+    try {
+      const pend = await LNot.getPending().catch(() => ({ notifications: [] }));
+      const old = (pend.notifications || []).filter(x => x.id >= 50000 && x.id < 60000).map(x => ({ id: x.id }));
+      if (old.length) await LNot.cancel({ notifications: old });
+      const P = notifPrefs(), list = [], now = Date.now(); let id = 50000;
+      const at = (k, min) => new Date((idxOfKey(k) * 1440 + min - 180) * 60000); // دقايق بتوقيت الرياض ← وقت فعلي
+      const add = (k, min, title, body, go) => { const d = at(k, min); if (d.getTime() > now + 30000) list.push({ id: id++, title, body, schedule: { at: d, allowWhileIdle: true }, extra: { go: go || '' } }); };
+      for (let i = 0; i < 2; i++) {
+        const k = keyOfIdx(todayIdx() + i), dow = fromKey(k).getDay();
+        if (P.pray !== false && UI.opts.prayOn !== false) {
+          const [y, mo, d] = k.split('-').map(Number), L = prayLoc(), t = prayTimes(y, mo, d, L.lat, L.lng);
+          PRAYERS.forEach(([pk]) => { const nm = prayName(pk, dow); add(k, Math.round(t[pk]) - 5, (nm === 'الجمعة' ? 'صلاة الجمعة' : 'صلاة ' + nm) + ' بعد ٥ دقائق', T('prayMsg') + ' · الأذان الساعة ' + tm(Math.round(t[pk]))); });
+        }
+        if (P.salawat !== false) for (let h = 7; h <= 23; h++) add(k, h * 60, SALAWAT_T, SALAWAT_B);
+        if (P.att !== false && meEmp && !canSee() && meEmp.active && k >= meEmp.start) {
+          const PL = planKey(k), r = getRec(meEmp, k);
+          if (!PL.off && !(r && r.in != null)) { add(k, PL.start + 1, 'لازم تسجّل حضورك', 'الدوام بدأ الساعة ' + tm(PL.start), 'vEmp'); add(k, PL.start + 5, 'سجّل حضورك الآن', 'فترة السماح قربت تخلص', 'vEmp'); }
+          if (!PL.off && PL.two && !(r && r.in2 != null)) add(k, PL.b2 - 5, 'العودة من البريك بعد ٥ دقائق', 'لا تنسَ تسجيل بصمة العودة الساعة ' + tm(PL.b2), 'vEmp');
+        }
+      }
+      if (list.length) await LNot.schedule({ notifications: list.slice(0, 60) });
+    } catch (e) { }
+  }, 800);
+}
+async function notifState() {
+  if (NATIVE && LNot) { try { const r = await LNot.checkPermissions(); return r.display === 'granted' ? 'granted' : r.display === 'denied' ? 'denied' : 'default'; } catch (e) { return 'default'; } }
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission;
+}
+async function enableNotifs() {
+  if (NATIVE && LNot) { try { await LNot.requestPermissions(); } catch (e) { } nativeSchedule(); return notifState(); }
+  if ('Notification' in window && Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) { } }
+  return notifState();
+}
+function notifCardHTML() {
+  const P = notifPrefs(), row = (k, l, d) => `<label class="switch nrow"><input type="checkbox" data-np="${k}" ${P[k] !== false ? 'checked' : ''}><span><b>${l}</b><small>${d}</small></span></label>`;
+  return `<section class="card reveal notifcard" style="margin-top:14px"><h2>${ic('bell', 18)} إشعارات الجوال</h2>
+   <div class="nstate" id="nState"><span class="muted small">جارٍ التحقق…</span></div>
+   <div class="row-btns" style="margin:10px 0"><button class="btn primary" type="button" id="nOn">${ic('bell', 16)} تفعيل الإشعارات</button><button class="btn ghost" type="button" id="nTest">${ic('check', 16)} إشعار تجريبي</button></div>
+   ${row('att', 'الحضور والانصراف', canSee() ? 'مين حضر ومين اتأخر، والبريك والانصراف' : 'تذكير بتسجيل الحضور والعودة من البريك والانصراف')}
+   ${row('chat', 'رسايل الشات', 'أي رسالة جديدة في الشات الداخلي')}
+   ${row('pray', 'مواقيت الصلاة', 'قبل الأذان بـ ٥ دقائق: قم للوضوء')}
+   ${row('salawat', 'الصلاة على النبي ﷺ', 'كل ساعة من ٧ الصبح لـ ١١ بالليل')}
+   <p class="muted small" style="margin:8px 0 0">${NATIVE ? 'في تطبيق الأندرويد: الصلاة والصلاة على النبي وتذكير الحضور بيوصلوا حتى والتطبيق مقفول. الشات بيوصل والتطبيق مفتوح أو في الخلفية.' : 'الإشعارات بتوصل والتطبيق مفتوح أو في الخلفية. عشان توصل والتطبيق مقفول خالص، استخدم تطبيق الأندرويد.'}</p></section>`;
+}
+async function paintNotifState() {
+  const el = $('nState'); if (!el) return; const st = await notifState();
+  const M = { granted: ['ok', 'الإشعارات مفعّلة ✅ وهتظهر في إشعارات الجوال'], default: ['warn', 'الإشعارات لسه مش مفعّلة. دوس «تفعيل الإشعارات» ووافق.'], denied: ['bad', 'الإشعارات مقفولة من إعدادات الجوال. افتح الإعدادات ← التطبيقات ← ' + (NATIVE ? 'بصمة الشمراني' : 'المتصفح') + ' ← الإشعارات، وفعّلها.'], unsupported: ['warn', 'المتصفح ده مش بيدعم الإشعارات. على الآيفون: ثبّت التطبيق على الشاشة الرئيسية من Safari وافتحه من الأيقونة. على الأندرويد: استخدم تطبيق الأندرويد أو Chrome.'] }[st];
+  el.innerHTML = `<div class="nst nst-${M[0]}">${ic(st === 'granted' ? 'check' : 'alert', 16)}<span>${M[1]}</span></div>`;
+  const b = $('nOn'); if (b) b.hidden = st === 'granted' || st === 'unsupported';
+}
+function bindNotifCard() {
+  if (!$('nOn')) return; paintNotifState();
+  $('nOn').onclick = async () => { const st = await enableNotifs(); paintNotifState(); if (st === 'granted') { toast('ok', 'تم تفعيل الإشعارات', 'هتوصلك في إشعارات الجوال', 'الإشعارات'); sysNotify('بصمة الشمراني', 'الإشعارات شغالة ✅', 'test', ''); } else if (st === 'denied') toast('bad', 'الإشعارات مرفوضة', 'فعّلها من إعدادات الجوال', 'الإشعارات'); };
+  $('nTest').onclick = async () => { const st = await notifState(); if (st !== 'granted') { toast('warn', 'فعّل الإشعارات الأول', '', 'الإشعارات'); return; } sysNotify('إشعار تجريبي 🔔', 'لو شايف الرسالة دي في إشعارات الجوال يبقى كله تمام', 'test', ''); toast('ok', 'اتبعت إشعار تجريبي', 'بُص على إشعارات الجوال', 'الإشعارات'); };
+  document.querySelectorAll('[data-np]').forEach(i => i.onchange = () => setNotifPref(i.dataset.np, i.checked));
+}
 function checkPrayer() {
   if (!me || UI.opts.prayOn === false) return;
   const t = todayPrayers(), n = nowMin(), key = todayKey(), dow = fromKey(key).getDay();
@@ -841,6 +924,110 @@ function checkPrayer() {
     if (n >= t[k] - 5 && n < t[k] && !notified.has(id)) { notified.add(id); const nm = prayName(k, dow); alertBoth('pray', (nm === 'الجمعة' ? 'صلاة الجمعة' : 'صلاة ' + nm) + ' بعد ' + dur(Math.max(1, Math.ceil(t[k] - n))), T('prayMsg') + ' · الأذان الساعة ' + tm(t[k]), 'تذكير الصلاة', 'pray-' + k, ''); }
   });
   paintPray();
+}
+
+/* ========== المراقب: موظف يشوف حضور وغياب الكل ويبصم عادي ========== */
+function setWatch(on) {
+  if (on && !isWatch) {
+    isWatch = true;
+    const ys = idxOfKey(today0().getFullYear() + '-01-01');
+    watchUnsubs.push(onSnapshot(collection(db, 'employees'), sn => { wEmps = sn.docs.map(empFromDoc); if (view === 'vWatch') paintWatch(); }, () => { }));
+    watchUnsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', ys)), onDays, () => { }));
+    if (me && !$('tabbar').hidden) paintTabs();
+  } else if (!on && isWatch) {
+    isWatch = false; watchUnsubs.forEach(u => { try { u(); } catch (e) { } }); watchUnsubs = []; wEmps = [];
+    if (view === 'vWatch') renderEmp(); else if (me && !$('tabbar').hidden) paintTabs();
+  }
+}
+const allEmps = () => canSee() ? emps : isWatch ? wEmps : [];
+function dayStatus(e, k) {
+  const P = planKey(k), r = getRec(e, k);
+  if (k < e.start) return { s: 'na' };
+  if (r && (r.in != null || r.in2 != null)) {
+    const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
+    return { s: P.off ? 'extra' : r.in != null && r.in < P.start ? 'early' : lv === 'r' ? 'vlate' : lv === 'y' ? 'late' : 'ok', r, P };
+  }
+  if (P.off) return { s: 'off', P };
+  if (isToday(k) && nowMin() < P.start + grace()) return { s: 'wait', P };
+  return { s: 'absent', P };
+}
+const DS = { ok: ['في الموعد', 'c-present'], early: ['بدري', 'c-present'], late: ['متأخر', 'c-late'], vlate: ['تأخير كبير', 'c-absent'], absent: ['غائب', 'c-absent'], off: ['إجازة', 'c-off'], wait: ['لسه', 'c-off'], extra: ['حضر في إجازة', 'c-break'] };
+function renderWatch() {
+  show('vWatch'); const v = $('vWatch'), k = wDay || todayKey();
+  v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} متابعة الحضور والغياب</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
+   <section class="card reveal"><div class="fl"><label for="wDayIn">اليوم</label><input type="date" id="wDayIn" value="${k}" max="${todayKey()}"></div>
+    <div class="wkpis" id="wK"></div><div class="wlist" id="wList"></div></section>
+   ${exportCardHTML()}`;
+  $('wDayIn').onchange = e => { wDay = e.target.value || null; paintWatch(); };
+  bindExport(); paintWatch();
+}
+function paintWatch() {
+  const el = $('wList'); if (!el) return; const k = (($('wDayIn') && $('wDayIn').value) || todayKey());
+  const list = allEmps().filter(e => e.active).map(e => ({ e, d: dayStatus(e, k) })).filter(x => x.d.s !== 'na');
+  const c = s => list.filter(x => s.includes(x.d.s)).length;
+  $('wK').innerHTML = [['حاضر', c(['ok', 'early', 'late', 'vlate', 'extra']), 'g'], ['بدري', c(['early']), 'g'], ['متأخر', c(['late', 'vlate']), 'y'], ['غائب', c(['absent']), 'r']].map(([l, n, t]) => `<div class="wk wk-${t}"><b class="num">${ar(n)}</b><small>${l}</small></div>`).join('');
+  const order = { absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
+  el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
+    const r = d.r, P = d.P || planKey(k), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '';
+    return `<div class="wrow"><div class="av">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span></b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}</div></div>`;
+  }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين في اليوم ده</p>';
+}
+function exportCardHTML() {
+  const t = todayKey();
+  return `<section class="card reveal" style="margin-top:14px"><h2>${ic('file', 18)} تنزيل كشف الحضور والغياب (Excel)</h2>
+   <p class="muted small" style="margin:0 0 10px">ملف فيه صفحتين: «الملخص» لكل موظف (حضور، غياب، تأخير، بدري، ساعات العمل) و«التفاصيل» يوم بيوم.</p>
+   <div class="ggrid"><div class="fl"><label for="xMonth">الشهر</label><input type="month" id="xMonth" value="${t.slice(0, 7)}" max="${t.slice(0, 7)}"></div><div class="fl"><label for="xYear">السنة</label><input id="xYear" inputmode="numeric" value="${t.slice(0, 4)}"></div></div>
+   <div class="row-btns" style="margin-top:6px"><button class="btn primary" type="button" id="xM">${ic('download', 16)} كشف الشهر</button><button class="btn ghost" type="button" id="xY">${ic('download', 16)} كشف السنة</button></div>
+   ${NATIVE ? '<p class="muted small" style="margin:8px 0 0">لو التنزيل ما اشتغلش من تطبيق الأندرويد، افتح الموقع من المتصفح ونزّله من هناك.</p>' : ''}</section>`;
+}
+function bindExport() {
+  if (!$('xM')) return;
+  $('xM').onclick = () => { const m = $('xMonth').value || todayKey().slice(0, 7), [y, mo] = m.split('-').map(Number), last = new Date(y, mo, 0).getDate(); exportXlsx(m + '-01', m + '-' + pad(last), 'شهر ' + m, `shamrani-attendance-${m}.xlsx`); };
+  $('xY').onclick = () => { const y = parseInt(toEn($('xYear').value), 10); if (!(y > 2000 && y < 2100)) { toast('bad', 'اكتب السنة صح', 'مثلاً ' + todayKey().slice(0, 4), 'التقارير'); return; } exportXlsx(y + '-01-01', y + '-12-31', 'سنة ' + y, `shamrani-attendance-${y}.xlsx`); };
+}
+async function loadXLSX() {
+  if (window.XLSX) return window.XLSX;
+  await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  return window.XLSX;
+}
+async function exportXlsx(fromK, toK, label, fname) {
+  toast('info', 'جارٍ تجهيز الكشف…', label, 'التقارير');
+  try {
+    const X = await loadXLSX(), a = idxOfKey(fromK), b = Math.min(idxOfKey(toK), todayIdx());
+    if (b < a) { toast('warn', 'الفترة دي لسه ماجتش', '', 'التقارير'); return; }
+    const snap = await getDocs(query(collection(db, 'days'), where('day', '>=', a), where('day', '<=', b)));
+    const R = {}; snap.docs.forEach(d => { const x = d.data(); if (x.day < a || x.day > b) return; (R[x.uid] = R[x.uid] || {})[keyOfIdx(x.day)] = docToRec(x); });
+    const hm = m => m == null ? '' : tm(m), hrs = m => Math.round(m / 6) / 10;
+    const sum = [['الموظف', 'القسم', 'أيام العمل', 'حضور', 'غياب', 'في الموعد', 'بدري', 'متأخر', 'تأخير كبير', 'مجموع التأخير (دقيقة)', 'ساعات العمل', 'نسبة الحضور']];
+    const det = [['التاريخ', 'اليوم', 'الموظف', 'القسم', 'الحالة', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'التأخير (دقيقة)', 'ساعات العمل', 'سبب التأخير', 'حي الإشراف']];
+    const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' });
+    allEmps().filter(e => e.active || R[e.id]).forEach(e => {
+      let wd = 0, pr = 0, ab = 0, ok = 0, ea = 0, la = 0, vl = 0, lm = 0, mins = 0;
+      for (let i = a; i <= b; i++) {
+        const k = keyOfIdx(i); if (k < e.start) continue;
+        const P = planKey(k), r = autoRec((R[e.id] && R[e.id][k]) || null, k), has = r && (r.in != null || r.in2 != null);
+        if (!P.off) wd++;
+        if (!has) { if (P.off || (isToday(k) && nowMin() < P.start + grace())) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
+        pr++; const w = worked(r, k); mins += w;
+        let st = 'حضر في إجازة', late = 0;
+        if (!P.off) {
+          const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
+          late = (r.in != null ? Math.max(0, r.in - P.start - grace()) : 0) + (P.two && r.in2 != null ? Math.max(0, r.in2 - P.b2 - brG()) : 0);
+          if (r.in != null && r.in < P.start) { st = 'بدري'; ea++; } else if (lv === 'r') { st = 'تأخير كبير'; vl++; } else if (lv === 'y') { st = 'متأخر'; la++; } else { st = 'في الموعد'; ok++; }
+          lm += late;
+        }
+        det.push([k, dayName.format(fromKey(k)), e.name, e.dept, st, hm(r.in), hm(r.out1) + (r.m.out1 === 'auto' ? ' تلقائي' : ''), hm(r.in2), hm(r.out) + (r.m.out === 'auto' ? ' تلقائي' : ''), late || '', hrs(w), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
+      }
+      sum.push([e.name, e.dept, wd, pr, ab, ok, ea, la, vl, lm, hrs(mins), wd ? Math.round(Math.min(pr, wd) / wd * 100) + '%' : '']);
+    });
+    det.splice(1, det.length - 1, ...det.slice(1).sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : String(x[2]).localeCompare(String(y[2]), 'ar')));
+    const wb = X.utils.book_new(), s1 = X.utils.aoa_to_sheet([['كشف الحضور والغياب · ' + COMPANY], ['الفترة: ' + fromK + ' إلى ' + keyOfIdx(b)], [], ...sum]), s2 = X.utils.aoa_to_sheet(det);
+    s1['!cols'] = [24, 14, 10, 8, 8, 10, 8, 8, 11, 18, 11, 11].map(w => ({ wch: w })); s2['!cols'] = [12, 10, 22, 14, 12, 10, 14, 10, 14, 12, 10, 24, 18].map(w => ({ wch: w }));
+    X.utils.book_append_sheet(wb, s1, 'الملخص'); X.utils.book_append_sheet(wb, s2, 'التفاصيل'); wb.Workbook = { Views: [{ RTL: true }] };
+    const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+    toast('ok', 'تم تنزيل الكشف', label + ' · ' + ar(sum.length - 1) + ' موظف', 'التقارير');
+  } catch (x) { toast('bad', 'تعذّر تجهيز الكشف', errWhy(x), 'التقارير'); }
 }
 
 /* ========== الملف الشخصي للموظف ========== */
@@ -879,7 +1066,7 @@ function renderSetup() {
   $('suSave').onclick = async () => {
     if (!pic) { $('suErr').textContent = 'الصورة الشخصية مطلوبة'; return; }
     const b = $('suSave'); b.disabled = true; b.textContent = 'جارٍ الحفظ…';
-    try { await updateDoc(doc(db, 'employees', me.uid), { photo: pic.photo, photoSm: pic.photoSm, jobTitle: $('suJob').value.trim().slice(0, 60), phone: toEn($('suPhone').value.trim()).slice(0, 20), profileAt: serverTimestamp() }); justLoggedIn = true; toast('ok', 'تم حفظ صورتك', 'أهلاً بيك في بصمة الشمراني', 'حسابك'); }
+    try { await updateDoc(doc(db, 'employees', me.uid), { photo: pic.photo, photoSm: pic.photoSm, profileDone: true, jobTitle: $('suJob').value.trim().slice(0, 60), phone: toEn($('suPhone').value.trim()).slice(0, 20), profileAt: serverTimestamp() }); justLoggedIn = true; toast('ok', 'تم حفظ صورتك', 'أهلاً بيك في بصمة الشمراني', 'حسابك'); }
     catch (x) { $('suErr').textContent = errWhy(x); b.disabled = false; b.innerHTML = `${ic('check', 18)} حفظ ومتابعة`; }
   };
 }
@@ -889,7 +1076,7 @@ function renderMe() {
   v.innerHTML = `<section class="card reveal mecard">
     <div class="mehead"><button type="button" class="bigpic has" id="mePic" aria-label="تغيير الصورة">${e.photo ? `<img src="${e.photo}" alt="">` : ic('user', 40)}<span class="camfab">${ic('camera', 16)}</span></button>
      <div><b>${esc(e.name)}</b><small class="muted">${esc(e.jobTitle || '')}${e.jobTitle && e.dept ? ' · ' : ''}${esc(e.dept || '')}</small><small class="muted" dir="auto">${ic('user', 12)} ${esc(e.num)}</small></div></div>
-    <div class="row-btns" id="mePicBtns" hidden><button class="btn ghost" type="button" id="meCamB">${ic('camera', 15)} صوّر</button><button class="btn ghost" type="button" id="meGalB">${ic('image', 15)} من المعرض</button></div>
+    <div class="row-btns" id="mePicBtns" hidden><button class="btn ghost" type="button" id="meCamB">${ic('camera', 15)} صوّر</button><button class="btn ghost" type="button" id="meGalB">${ic('image', 15)} من المعرض</button>${e.photo ? `<button class="btn ghost danger-t" type="button" id="meDelPic">${ic('trash', 15)} مسح الصورة</button>` : ''}</div>
     ${picInputs('me')}
    </section>
    <section class="card reveal" style="margin-top:14px"><h2>بياناتي</h2>
@@ -897,6 +1084,11 @@ function renderMe() {
     <div class="fl"><label for="pf_name">الاسم</label><input id="pf_name" data-pf="name" maxlength="60" value="${esc(e.name)}"></div>
     ${PROF_FIELDS.map(([k, l, ph, t]) => `<div class="fl"><label for="pf_${k}">${l}</label>${t === 'area' ? `<textarea id="pf_${k}" data-pf="${k}" rows="2" maxlength="300" placeholder="${ph}">${esc(e[k])}</textarea>` : `<input id="pf_${k}" data-pf="${k}" type="${t}" ${t === 'tel' || t === 'email' ? 'dir="ltr"' : ''} maxlength="${k === 'phone' ? 20 : 80}" placeholder="${ph}" value="${esc(e[k])}">`}</div>`).join('')}
     <button class="btn primary" type="button" id="meSave" style="width:100%">${ic('check', 16)} حفظ البيانات</button><div class="err" id="meErr"></div>
+   </section>
+   ${notifCardHTML()}
+   <section class="card reveal" style="margin-top:14px"><h2>${ic('finger', 18)} بصمة الإصبع</h2>
+    <p class="muted small" style="margin:0 0 10px" id="bioState">${e.cred ? 'بصمة الإصبع مفعّلة ومربوطة بجوالك. تقدر تبصم بيها من صفحة البصمة.' : 'بصمة الإصبع مش مفعّلة. فعّلها عشان تبصم بإصبعك بدل الكاميرا.'}</p>
+    <button class="btn ${e.cred ? 'ghost' : 'primary'}" type="button" id="bioOn" style="width:100%">${ic('finger', 16)} ${e.cred ? 'جرّب البصمة' : 'تفعيل بصمة الإصبع'}</button>
    </section>
    <section class="card reveal" style="margin-top:14px"><h2>${ic('key', 18)} تغيير كلمة السر</h2>
     <div class="fl"><label for="mpOld">كلمة السر الحالية</label><input id="mpOld" type="password" autocomplete="current-password"></div>
@@ -907,15 +1099,15 @@ function renderMe() {
    </section>
    <section class="card reveal" style="margin-top:14px"><h2>الحساب</h2>
     <div class="melinks">
-     ${'Notification' in window && Notification.permission !== 'granted' ? `<button type="button" id="meNotif">${ic('bell', 18)}<span>فعّل الإشعارات على الجوال</span>${ic('left', 14)}</button>` : ''}
      <button type="button" id="meOut" class="danger-t">${ic('logout', 18)}<span>تسجيل الخروج</span>${ic('left', 14)}</button>
     </div>
    </section>`;
   $('mePic').onclick = () => { $('mePicBtns').hidden = !$('mePicBtns').hidden; };
+  if (!e.photo) $('mePicBtns').hidden = false;
   $('meCamB').onclick = () => $('meCam').click(); $('meGalB').onclick = () => $('meGal').click();
   bindPic('me', async p => {
     $('mePic').innerHTML = `<img src="${p.photo}" alt=""><span class="camfab">${ic('camera', 16)}</span>`; $('mePicBtns').hidden = true;
-    try { await updateDoc(doc(db, 'employees', me.uid), { photo: p.photo, photoSm: p.photoSm, profileAt: serverTimestamp() }); toast('ok', 'تم تغيير صورتك', '', 'حسابك'); } catch (x) { toast('bad', 'تعذّر حفظ الصورة', errWhy(x), 'حسابك'); }
+    try { await updateDoc(doc(db, 'employees', me.uid), { photo: p.photo, photoSm: p.photoSm, profileDone: true, profileAt: serverTimestamp() }); toast('ok', 'تم تغيير صورتك', '', 'حسابك'); renderMe(); } catch (x) { toast('bad', 'تعذّر حفظ الصورة', errWhy(x), 'حسابك'); }
   });
   $('meSave').onclick = async () => {
     const data = {}; v.querySelectorAll('[data-pf]').forEach(i => { let x = i.value.trim(); if (i.type === 'tel') x = toEn(x); data[i.dataset.pf] = x; });
@@ -925,7 +1117,17 @@ function renderMe() {
     try { await updateDoc(doc(db, 'employees', me.uid), { ...data, profileAt: serverTimestamp() }); $('meErr').textContent = ''; toast('ok', 'تم حفظ بياناتك', '', 'حسابك'); } catch (x) { $('meErr').textContent = errWhy(x); } finally { b.disabled = false; }
   };
   bindPassForm(() => { ['mpOld', 'mpNew', 'mpNew2'].forEach(x => $(x).value = ''); });
-  if ($('meNotif')) $('meNotif').onclick = () => { if (Notification.permission === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح إعدادات المتصفح ← الإشعارات واسمح للموقع', 'حسابك'); else Notification.requestPermission().then(renderMe); };
+  if ($('meDelPic')) $('meDelPic').onclick = async () => {
+    const b = $('meDelPic'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('alert', 15)} اضغط تاني للمسح`; return; }
+    try { await updateDoc(doc(db, 'employees', me.uid), { photo: '', photoSm: '', profileDone: true }); toast('ok', 'تم مسح صورتك', '', 'حسابك'); renderMe(); } catch (x) { toast('bad', 'تعذّر المسح', errWhy(x), 'حسابك'); }
+  };
+  $('bioOn').onclick = async () => {
+    if (!window.__bio) { toast('warn', 'بصمة الإصبع مش متاحة هنا', NATIVE ? 'فعّل بصمة الإصبع من إعدادات الجوال الأول' : 'فعّل بصمة الإصبع في إعدادات الجوال، أو استخدم تطبيق الأندرويد', 'حسابك'); return; }
+    const ok = await bioVerify();
+    if (ok === true) { toast('ok', 'بصمة الإصبع شغالة ✅', 'تقدر تبصم بيها من صفحة البصمة', 'حسابك'); setTimeout(renderMe, 600); }
+    else toast('bad', ok === 'other' ? 'البصمة مربوطة بجوال تاني' : 'لم يتم التحقق من البصمة', ok === 'other' ? 'اطلب من المدير يفك ربط الجهاز' : 'جرّب تاني', 'حسابك');
+  };
+  bindNotifCard();
   $('meOut').onclick = () => $('logoutBtn').click();
 }
 
@@ -960,7 +1162,7 @@ function bindPassForm(done) {
 }
 
 /* ----- الإشعارات الداخلية: سجل بكل التنبيهات ----- */
-const LOG_IC = { ok: 'check', bad: 'alert', warn: 'bell', info: 'coffee', gold: 'bell', live: 'live', chat: 'chat', pray: 'mosque' };
+const LOG_IC = { salawat: 'heart', ok: 'check', bad: 'alert', warn: 'bell', info: 'coffee', gold: 'bell', live: 'live', chat: 'chat', pray: 'mosque' };
 const logKey = () => 'sh-log-' + (me ? me.uid : 'x');
 function getLog() { try { return JSON.parse(localStorage.getItem(logKey()) || '[]'); } catch (e) { return []; } }
 function pushLog(kind, title, body, go) { if (!me) return; const l = getLog(); l.unshift({ k: kind, t: title, b: body || '', g: go || '', at: Date.now() }); try { localStorage.setItem(logKey(), JSON.stringify(l.slice(0, 80))); } catch (e) { } paintBell(); }
@@ -1509,7 +1711,7 @@ function onChat(snap) {
       const who = m.name + (m.dept ? ' · ' + m.dept : ''), txt = (m.kind === 'img' ? '📷 صورة' + (m.text ? ' · ' : '') : m.kind === 'voice' ? '🎤 رسالة صوتية ' + fmtDur(m.dur || 0) : m.kind === 'file' ? '📎 ' + (m.fname || 'ملف') + (m.text ? ' · ' : '') : '') + String(m.text || '').slice(0, 140);
       if (view !== 'vChat') toast('chat', who, txt, 'الشات الداخلي');
       pushLog('chat', '💬 ' + who, txt, 'vChat');
-      if (view !== 'vChat' || document.hidden) sysNotify('💬 ' + who, txt, 'chat', 'vChat');
+      if ((view !== 'vChat' || document.hidden) && notifPrefs().chat !== false) sysNotify('💬 ' + who, txt, 'chat', 'vChat');
       else vibrate(20);
     });
   }
@@ -1549,9 +1751,8 @@ function renderChat() {
     const pl = e.target.closest('[data-voice]'); if (pl) { playVoice(pl); return; }
     const im = e.target.closest('[data-media] img'); if (im && im.dataset.full) { openViewer(im.src); return; }
     const fl = e.target.closest('[data-file]'); if (fl) { openFile(fl); return; }
-    const b = e.target.closest('[data-del]'); if (!b || !isOwner) return;
-    const m = msgs.find(x => x.id === b.dataset.del);
-    try { await deleteDoc(doc(db, 'chat', b.dataset.del)); if (m && m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); } catch (x) { toast('bad', 'تعذّر الحذف', '', 'الشات'); }
+    const b = e.target.closest('[data-mact]'); if (!b) return;
+    const m = msgs.find(x => x.id === b.dataset.mact); if (m) openMsgActions(m);
   };
   // صورة
   const am = $('attMenu');
@@ -1589,6 +1790,24 @@ function chatNotifCta() {
 }
 const NCOL = ['#c0392b', '#1f7a8c', '#7b4fa0', '#2e8b57', '#b8650a', '#3b5bb5', '#a0306e', '#4b7d1f'];
 const nameColor = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return NCOL[h % NCOL.length]; };
+function openMsgActions(m) {
+  const mine = m.uid === me.uid, sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
+  const canEdit = mine && !m.kind;
+  inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--gold);color:#fff">${ic('chat', 22)}</div><b>الرسالة <span class="muted small">${clockFmt.format(new Date(m.atMs))}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    ${canEdit ? `<div class="fl"><label for="meEdit">تعديل الرسالة</label><textarea id="meEdit" rows="3" maxlength="1000">${esc(m.text || '')}</textarea></div><button class="btn primary" type="button" id="meSaveMsg" style="width:100%">${ic('edit', 16)} حفظ التعديل</button>` : `<div class="msgprev">${m.kind ? (m.kind === 'img' ? '📷 صورة' : m.kind === 'voice' ? '🎤 رسالة صوتية' : '📎 ' + esc(m.fname || 'ملف')) : ''} ${esc(m.text || '')}</div>`}
+    <button class="btn ghost danger-t" type="button" id="meDelMsg" style="width:100%;margin-top:10px">${ic('trash', 16)} حذف الرسالة</button>
+    <div class="err" id="msgErr"></div>`;
+  sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+  if ($('meSaveMsg')) $('meSaveMsg').onclick = async () => {
+    const t = $('meEdit').value.trim(); if (!t) { $('msgErr').textContent = 'الرسالة فاضية، لو عايز تشيلها دوس حذف'; return; }
+    try { await updateDoc(doc(db, 'chat', m.id), { text: t, edited: true, editedAt: serverTimestamp() }); closeSheet(); toast('ok', 'تم تعديل الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = errWhy(x); }
+  };
+  $('meDelMsg').onclick = async () => {
+    const b = $('meDelMsg'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('alert', 16)} متأكد؟ اضغط تاني للحذف`; return; }
+    try { await deleteDoc(doc(db, 'chat', m.id)); if (m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = 'تعذّر الحذف'; }
+  };
+}
 function paintChat(jump) {
   const box = $('msgs'); if (!box) return;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
@@ -1596,7 +1815,7 @@ function paintChat(jump) {
   msgs.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${clockFmt.format(new Date(m.atMs))}${isOwner ? ` <button data-del="${m.id}" aria-label="حذف الرسالة">${ic('trash', 12)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
   });
   box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
@@ -1798,7 +2017,7 @@ function renderOwner() {
   v.querySelector('.depts').onclick = e => { const b = e.target.closest('[data-dept]'); if (!b) return; deptFilter = b.dataset.dept; renderOwner(); };
   const nb = $('notifBtn'); if (nb) nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } renderOwner(); };
   if (!isViewer) bindAdd();
-  const on = $('ownNotif'); if (on) on.onclick = () => { if (Notification.permission === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح إعدادات المتصفح ← الإشعارات واسمح للموقع', 'الإشعارات'); else Notification.requestPermission().then(() => renderOwner()); };
+  const on = $('ownNotif'); if (on) on.onclick = async () => { const st = await enableNotifs(); if (st === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح الإعدادات ← الإشعارات واسمح لها', 'الإشعارات'); renderOwner(); };
 }
 function bindAdd() {
   const n = $('nName'), u = $('nNum'), dp = $('nDept'), p = $('nPass'), er = $('addErr'), btn = $('addBtn');
@@ -1890,6 +2109,7 @@ function openSheet(id) {
     </div>
     <div class="row-btns" style="margin:-4px 0 14px">
       <button class="btn ghost" id="shActive">${emp.active ? 'إيقاف الحساب' : 'تفعيل الحساب'}</button>
+      <button class="btn ghost" id="shWatch">${ic('eye', 14)} ${emp.watch ? 'إلغاء صلاحية المراقب' : 'صلاحية مراقب'}</button>
       <button class="btn ghost danger-t" id="shDel">${ic('trash', 14)} حذف الموظف</button>
       ${emp.cred ? `<button class="btn ghost" id="shDev">${ic('device', 14)} إلغاء ربط الجهاز</button>` : `<span class="muted small" style="align-self:center">${ic('device', 13)} لم يربط جهازاً بعد</span>`}
     </div>
@@ -1910,6 +2130,7 @@ function openSheet(id) {
   };
   const sl = $('shLive'); if (sl) sl.onclick = () => { closeSheet(); renderMap(); setTimeout(() => { const l = lives[emp.id]; if (ownMap && l) ownMap.setView([l.lat, l.lng], 17); }, 900); };
   $('shActive').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { active: !emp.active }); closeSheet(); toast('ok', emp.active ? 'تم إيقاف حساب ' + emp.name : 'تم تفعيل حساب ' + emp.name, '', 'الإدارة'); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
+  $('shWatch').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { watch: !emp.watch }); closeSheet(); toast('ok', emp.watch ? 'اتشالت صلاحية المراقب من ' + emp.name : emp.name + ' بقى مراقب', emp.watch ? '' : 'هيظهرله تبويب «المتابعة» يشوف فيه الحضور والغياب وينزّل الكشوفات', 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحفظ'; } };
   const pp = inner.querySelector('.profpic[data-full]'); if (pp) pp.onclick = () => openViewer(pp.dataset.full);
   // كلمة السر: المالك يشوفها ويغيّرها
   let curPw = null, pwShown = false;
@@ -2008,6 +2229,8 @@ function renderSet() {
    <p class="muted small" style="margin:0 0 10px">نزّل نسخة من كل البيانات على جوالك أو جهازك. نزّل نسخة دايماً قبل أي «بدء من جديد».</p>
    <div class="row-btns"><button class="btn primary" id="bkJson" type="button">${ic('download', 16)} نسخة احتياطية كاملة</button><button class="btn ghost" id="bkCsv" type="button">${ic('file', 16)} كشف الحضور (Excel)</button></div>
   </section>
+  ${notifCardHTML()}
+  ${exportCardHTML()}
   <section class="card reveal dangerzone" style="margin-top:16px;animation-delay:.075s">
    <h2>${ic('restart', 18)} بدء من جديد</h2>
    <p class="muted small" style="margin:0 0 10px">بيمسح سجلات الحضور ويبدأ العدّ لكل الموظفين من النهارده (مثلاً مع إطلاق الحملة). الموظفين وحساباتهم والإعدادات بتفضل زي ما هي. محتاج كلمة سر المدير.</p>
@@ -2042,7 +2265,7 @@ function renderSet() {
   $('setBack').onclick = () => openTab('vOwn');
   $('phForm').onsubmit = async e => { e.preventDefault(); const ph = toEn($('phIn').value.trim()).replace(/[^\d+]/g, ''); try { await setDoc(doc(db, 'settings', 'main'), { phone: ph }, { merge: true }); toast('ok', ph ? 'تم حفظ رقم المدير' : 'تم مسح رقم المدير', ph, 'الإعدادات'); } catch (x) { toast('bad', 'تعذّر الحفظ', errWhy(x), 'الإعدادات'); } };
   $('bkJson').onclick = () => runBackup(true);
-  $('bkCsv').onclick = () => exportCsv();
+  $('bkCsv').onclick = () => exportCsv(); bindExport(); bindNotifCard();
   $('rsOpen').onclick = openReset;
   // grace
   const gEx = () => { const P = planOf(6).off ? planOf(0) : planOf(6), nv = id => parseInt(toEn($(id).value), 10) || 0; if (P.off) return; $('gEx').innerHTML = `مثال: الدوام ${tm(P.start)} ← <span class="tv tv-g">لحد ${tm(P.start + nv('gMin'))}</span> <span class="tv tv-y">لحد ${tm(P.start + nv('gRed'))}</span> <span class="tv tv-r">بعد كده</span>` + (P.two ? `<br>العودة ${tm(P.b2)} ← <span class="tv tv-g">لحد ${tm(P.b2 + nv('gBr'))}</span> <span class="tv tv-y">لحد ${tm(P.b2 + nv('gBrR'))}</span> <span class="tv tv-r">بعد كده</span>` : ''); };
@@ -2269,7 +2492,7 @@ function openReset() {
 }
 
 /* ========== data wiring ========== */
-function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; visits = []; myVisits = []; visitsFirst = true; mapTab = 'live'; }
+function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; setWatch(false); visits = []; myVisits = []; visitsFirst = true; mapTab = 'live'; }
 function onDays(snap) {
   const changes = firstDays ? [] : snap.docChanges();
   const prev = {};
@@ -2294,6 +2517,7 @@ function onDays(snap) {
     });
   }
   firstDays = false;
+  if (meEmp && !canSee()) nativeSchedule();
   refresh();
 }
 let refreshT = null;
@@ -2305,6 +2529,7 @@ function refresh() {
     else if (view === 'vEmp') { updateEmpLive(true); const p = $('myProf'); p && p._refresh && p._refresh(); }
     else if (view === 'vSet') { if (!typing) renderSet(); }
     else if (view === 'vMap') paintMap();
+    else if (view === 'vWatch') paintWatch();
   }, 120);
 }
 
@@ -2322,7 +2547,7 @@ onAuthStateChanged(auth, u => {
   startSession(u);
 });
 function startSession(u) {
-  setTimeout(() => { paintBell(); paintPray(); }, 0);
+  setTimeout(() => { paintBell(); paintPray(); nativeSchedule(); }, 0);
   if (isViewer) $('userChip').textContent = viewerName + ' · متابعة';
   unsubs.push(onSnapshot(doc(db, 'settings', 'main'), s => { settings = s.exists() ? s.data() : {}; if (!(view === 'vUi' && uiDirty)) applyUI(settings.ui); refresh(); }, () => { }));
   unsubs.push(onSnapshot(query(collection(db, 'chat'), orderBy('at', 'desc'), limit(300)), onChat, () => { }));
@@ -2344,11 +2569,12 @@ function startSession(u) {
     unsubs.push(onSnapshot(doc(db, 'employees', u.uid), s => {
       if (!s.exists()) { renderMsg('حسابك غير مسجّل كموظف', 'تواصل مع المالك لتفعيل حسابك.'); return; }
       meEmp = empFromDoc(s); emps = [meEmp];
+      setWatch(meEmp.watch && meEmp.active);
       $('userChip').textContent = meEmp.name;
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
-      if (!meEmp.photo) { if (view !== 'vSetup') renderSetup(); first = true; return; }
-      if (first || !['vEmp', 'vLive', 'vChat', 'vMe'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
+      if (!meEmp.photo && !meEmp.profileDone) { if (view !== 'vSetup') renderSetup(); first = true; return; }
+      if (first || !['vEmp', 'vLive', 'vChat', 'vMe', 'vWatch'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
       else if (view === 'vEmp') updateEmpLive(true);
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('uid', '==', u.uid)), onDays, () => { }));
@@ -2410,7 +2636,7 @@ paintThemeBtns();
 if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
 setDates(); tickClock();
 setInterval(() => { tickClock(); if (view === 'vEmp') updateEmpLive(false); }, 1000);
-setInterval(() => { checkEmpReminders(); checkOwnerAlerts(); checkPrayer(); }, 15000);
+setInterval(() => { checkEmpReminders(); checkOwnerAlerts(); checkPrayer(); checkSalawat(); }, 15000);
 setInterval(() => { setDates(); updateBands(); if (view === 'vEmp' && !busy) updateEmpLive(true); if (view === 'vOwn') renderFeed(false); if (view === 'vLive') paintLiveStats(); }, 20000);
 setInterval(() => { if (view === 'vMap') paintMap(); }, 10000);
 setTimeout(() => { const s = $('splash'); if (s) { s.classList.add('out'); setTimeout(() => s.remove(), 700); } checkEmpReminders(); checkOwnerAlerts(); checkPrayer(); }, RM ? 300 : 3000);
