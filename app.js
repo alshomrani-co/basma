@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=13';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=15';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -73,6 +73,9 @@ const I = {
   key: "M15 7a2 2 0 0 1 2 2M21 9a6 6 0 0 1-7.7 5.7L11 17H9v2H7v2H3v-3.6l6.3-6.3A6 6 0 1 1 21 9",
   helmet: "M3 18h18M5 18v-3a7 7 0 0 1 14 0v3M9 9V5.5a3 3 0 0 1 6 0V9M12 4v5",
   mosque: "M12 3c1.5 1.6 4 2.6 4 5.2a4 4 0 0 1-8 0C8 5.6 10.5 4.6 12 3zM4 21V12M20 21V12M3 12h2M19 12h2M7 21v-6h10v6M3 21h18M12 15v6",
+  left: "M15 6l-6 6 6 6",
+  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0",
+  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -194,7 +197,7 @@ function docToRec(d) {
 function empFromDoc(s) {
   const d = s.data();
   const created = d.createdAt && d.createdAt.toMillis ? keyOfIdx(dayIdx(d.createdAt.toMillis())) : todayKey();
-  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' } };
+  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', emergency: d.emergency || '', about: d.about || '' };
 }
 
 /* ========== day logic ========== */
@@ -289,7 +292,47 @@ function toast(kind, title, body, who, go) {
   while (box.children.length > 3) box.lastChild.remove();
   setTimeout(() => { el.classList.add('leave'); setTimeout(() => el.remove(), 400); }, kind === 'chat' ? 7000 : 5600);
 }
+/* ========== نسخة الأندرويد (APK): لايف في الخلفية، إشعارات الجوال، بصمة حقيقية ========== */
+const CAP = window.Capacitor, NATIVE = !!(CAP && typeof CAP.isNativePlatform === 'function' && CAP.isNativePlatform());
+const plug = n => { try { return NATIVE && CAP.registerPlugin ? CAP.registerPlugin(n) : null; } catch (e) { return null; } };
+const BGeo = plug('BackgroundGeolocation'), LNot = plug('LocalNotifications'), NBio = plug('NativeBiometric'), NHttp = plug('CapacitorHttp');
+const APK_URL = 'https://github.com/alshomrani-co/basma/releases/latest/download/basma-shamrani.apk';
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+let bgWatch = null, natTok = null, natNid = 1;
+if (NATIVE) {
+  document.documentElement.classList.add('native');
+  if (LNot) {
+    LNot.requestPermissions().catch(() => { });
+    LNot.addListener('localNotificationActionPerformed', a => { const g = a && a.notification && a.notification.extra && a.notification.extra.go; if (g) { if (me) goTo(g); else pendingGo = g; } }).catch(() => { });
+  }
+}
+// توكن الدخول للكتابة المباشرة من الخلفية (الأندرويد بيبطّأ اتصالات الصفحة بعد ٥ دقايق في الخلفية)
+async function natToken() {
+  const u = auth.currentUser; if (!u) throw new Error('noauth');
+  if (natTok && natTok.exp > Date.now() + 120000) return natTok.t;
+  try {
+    const r = await NHttp.request({ method: 'POST', url: 'https://securetoken.googleapis.com/v1/token?key=' + firebaseConfig.apiKey, headers: { 'Content-Type': 'application/json' }, data: { grant_type: 'refresh_token', refresh_token: u.refreshToken } });
+    const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
+    if (d && d.id_token) { natTok = { t: d.id_token, exp: Date.now() + (+d.expires_in || 3600) * 1000 }; return natTok.t; }
+  } catch (e) { }
+  const t = await u.getIdToken(); natTok = { t, exp: Date.now() + 50 * 60000 }; return t;
+}
+async function liveRest(p) {
+  const tok = await natToken(), base = `projects/${firebaseConfig.projectId}/databases/(default)/documents`;
+  const num = v => v == null ? { nullValue: null } : { doubleValue: +v };
+  const fields = {
+    uid: { stringValue: me.uid }, name: { stringValue: meEmp.name }, dept: { stringValue: meEmp.dept || '' }, on: { booleanValue: true },
+    lat: num(p.lat), lng: num(p.lng), acc: num(p.acc), spd: num(p.spd), bg: { booleanValue: true },
+    path: { arrayValue: { values: livePath.map(x => ({ mapValue: { fields: { lat: { doubleValue: x.lat }, lng: { doubleValue: x.lng }, t: { integerValue: String(x.t) } } } })) } }
+  };
+  const r = await NHttp.request({ method: 'POST', url: `https://firestore.googleapis.com/v1/${base}:commit`, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok },
+    data: { writes: [{ update: { name: `${base}/live/${me.uid}`, fields }, updateMask: { fieldPaths: Object.keys(fields) }, updateTransforms: [{ fieldPath: 'at', setToServerValue: 'REQUEST_TIME' }] }] } });
+  if (r && r.status === 401) natTok = null;
+}
+function devId() { let d = null; try { d = localStorage.getItem('sh-dev'); if (!d) { d = 'and-' + Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('sh-dev', d); } } catch (e) { d = 'and-x'; } return d; }
+
 async function sysNotify(title, body, tag, go) {
+  if (NATIVE && LNot) { try { await LNot.schedule({ notifications: [{ id: (natNid = (natNid % 100000) + 1) + 1000, title, body, extra: { go: go || '' } }] }); } catch (e) { } return; }
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const reg = await navigator.serviceWorker.getRegistration();
@@ -302,7 +345,7 @@ function alertBoth(kind, title, body, who, tag, go) { toast(kind, title, body, w
 function goTo(target) {
   if (!target || !me) return;
   const [tab, id] = String(target).split(':');
-  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat'];
+  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat', 'vMe'];
   if (!ok.includes(tab)) return;
   if (tab === 'vMap' && id === 'visits') { mapTab = 'visits'; if (view === 'vMap') renderMap(); else openTab('vMap'); return; }
   if (tab === 'vMap' && mapTab !== 'live') { mapTab = 'live'; if (view === 'vMap') renderMap(); }
@@ -319,8 +362,8 @@ function tickClock() { $('bigClock').textContent = new Date().toLocaleTimeString
 function setDates() { const d = new Date(); $('gDate').textContent = gNow.format(d); $('hDate').textContent = hNow.format(d) + ' هـ'; }
 
 /* ========== views + tab bar ========== */
-const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi'];
-const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات']];
+const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vSetup'];
+const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات'], ['vMe', 'user', 'حسابي']];
 const TABS_VIEW = [['vOwn', 'home', 'الحضور'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات']];
 const TABS_OWN = [['vOwn', 'home', 'الرئيسية'], ['vMap', 'map', 'الخريطة'], ['vChat', 'chat', 'الشات'], ['vUi', 'brush', 'التخصيص'], ['vSet', 'gear', 'الإعدادات']];
 function show(id) {
@@ -329,7 +372,7 @@ function show(id) {
   VIEWS.forEach(v => { $(v).hidden = v !== id; });
   view = id;
   $('chrome').hidden = id === 'vLogin';
-  const tabbed = ['vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet'].includes(id);
+  const tabbed = ['vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe'].includes(id);
   $('tabbar').hidden = !tabbed; document.body.classList.toggle('has-tabs', tabbed);
   if (tabbed) paintTabs();
   if (id === 'vChat') { markChatRead(); }
@@ -357,7 +400,7 @@ function paintTabs() {
 $('tabbar').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; vibrate(10); openTab(b.dataset.tab); };
 function openTab(v) {
   if (v === view) return;
-  if (v === 'vEmp') renderEmp(); else if (v === 'vOwn') renderOwner(); else if (v === 'vLive') renderLive(); else if (v === 'vMap') renderMap(); else if (v === 'vChat') renderChat(); else if (v === 'vSet') renderSet(); else if (v === 'vUi') renderUi();
+  if (v === 'vEmp') renderEmp(); else if (v === 'vOwn') renderOwner(); else if (v === 'vLive') renderLive(); else if (v === 'vMap') renderMap(); else if (v === 'vChat') renderChat(); else if (v === 'vSet') renderSet(); else if (v === 'vUi') renderUi(); else if (v === 'vMe') renderMe();
   scrollTo({ top: 0, behavior: RM ? 'auto' : 'smooth' });
 }
 
@@ -448,7 +491,7 @@ const TEXT_DEF = [
   ['التأخير', [['lateMsg', 'رسالة الموظف المتأخر', 'اكتب سبب التأخير وهيوصل للمدير، أو كلّمه مباشرة، أو اكتب في الشات.'], ['lateReasons', 'أسباب جاهزة (افصل بينها بفاصلة)', 'زحمة طريق، ظرف عائلي، موعد طبي، كنت في موقع عمل']]],
   ['الصلاة', [['prayMsg', 'رسالة تذكير الصلاة', 'قم للوضوء 🕌']]],
   ['الشات', [['chatTitle', 'عنوان الشات', 'الشات الداخلي'], ['chatSub', 'وصف الشات', 'لكل موظفي الشركة']]],
-  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
+  ['القائمة السفلية', [['tab_vEmp', 'البصمة', 'البصمة'], ['tab_vLive', 'موقعي المباشر', 'موقعي المباشر'], ['tab_vChat', 'الشات', 'الشات'], ['tab_vMe', 'حسابي (الموظف)', 'حسابي'], ['tab_vOwn', 'الرئيسية (المالك)', 'الرئيسية'], ['tab_vOwnV', 'الحضور (حساب المتابعة)', 'الحضور'], ['tab_vMap', 'الخريطة', 'الخريطة'], ['tab_vUi', 'التخصيص', 'التخصيص'], ['tab_vSet', 'الإعدادات', 'الإعدادات']]]
 ];
 const TXT0 = Object.fromEntries(TEXT_DEF.flatMap(g => g[1]).map(x => [x[0], x[2]]));
 const OPT0 = { dhikrOn: true, dhikrSize: 'm', dhikrShine: true, noticeOn: false, notice: '', prayOn: true };
@@ -801,6 +844,84 @@ function checkPrayer() {
   paintPray();
 }
 
+/* ========== الملف الشخصي للموظف ========== */
+const PROF_FIELDS = [['jobTitle', 'المسمى الوظيفي', 'مثلاً: مهندس مدني', 'text'], ['phone', 'رقم الجوال', '05xxxxxxxx', 'tel'], ['email', 'البريد الإلكتروني', 'name@example.com', 'email'], ['city', 'السكن (الحي / المدينة)', 'مثلاً: حي الملقا، الرياض', 'text'], ['emergency', 'رقم للطوارئ', 'اسم وقرابة ورقم', 'text'], ['about', 'نبذة', 'خبرتك أو تخصصك', 'area']];
+function profInfo(emp) {
+  const rows = PROF_FIELDS.filter(([k]) => emp[k]).map(([k, l]) => `<div class="pwrow"><span class="muted small">${l}</span><b dir="auto">${k === 'phone' ? `<a href="tel:${esc(emp.phone)}">${esc(emp.phone)}</a>` : k === 'email' ? `<a href="mailto:${esc(emp.email)}">${esc(emp.email)}</a>` : esc(emp[k])}</b></div>`).join('');
+  return `<div class="card profcard" style="padding:14px;margin:0 0 12px"><div class="profhead">${emp.photo ? `<button type="button" class="profpic" data-full="${emp.photo}" aria-label="تكبير الصورة"><img src="${emp.photo}" alt=""></button>` : `<div class="profpic none">${ic('user', 30)}</div>`}<div><b>${esc(emp.name)}</b><small class="muted">${esc(emp.jobTitle || emp.dept || '')}</small>${emp.photo ? '' : '<small class="lnote">لسه ما حطّش صورته</small>'}</div></div>${rows || '<p class="muted small" style="margin:8px 0 0">الموظف لسه ما كتبش بياناته.</p>'}</div>`;
+}
+async function photoFromFile(f) {
+  const d = (await packImage(f)).data;
+  const sq = (src, n) => new Promise((res, rej) => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = c.height = n; const m = Math.min(im.width, im.height); c.getContext('2d').drawImage(im, (im.width - m) / 2, (im.height - m) / 2, m, m, 0, 0, n, n); res(c.toDataURL('image/jpeg', .78)); }; im.onerror = rej; im.src = src; });
+  return { photo: await sq(d, 320), photoSm: await sq(d, 72) };
+}
+const picInputs = id => `<input type="file" id="${id}Cam" accept="image/*" capture="user" hidden><input type="file" id="${id}Gal" accept="image/*" hidden>`;
+function bindPic(id, onPic) {
+  [id + 'Cam', id + 'Gal'].forEach(x => $(x).onchange = async () => { const f = $(x).files && $(x).files[0]; if (!f) return; try { onPic(await photoFromFile(f)); } catch (e) { toast('bad', 'تعذّر قراءة الصورة', 'جرّب صورة تانية', 'حسابك'); } $(x).value = ''; });
+}
+// أول دخول: الصورة الشخصية إجباري
+function renderSetup() {
+  show('vSetup'); const v = $('vSetup'); let pic = null;
+  v.innerHTML = `<div class="authcard setup">
+    <div class="steps"><span class="done">١ كلمة السر</span><i></i><span class="on">٢ صورتك</span></div>
+    <h1>أهلاً ${esc(meEmp.name.split(' ')[0])} 👋</h1>
+    <p class="muted">حط صورتك الشخصية عشان تكمّل. الصورة بتظهر للمدير وفي الشات.</p>
+    <button type="button" class="bigpic" id="suPic" aria-label="إضافة صورة شخصية">${ic('camera', 40, 1.4)}<span>صورتك هنا</span></button>
+    <div class="row-btns" style="justify-content:center"><button class="btn primary" type="button" id="suCamB">${ic('camera', 16)} صوّر نفسك</button><button class="btn ghost" type="button" id="suGalB">${ic('image', 16)} من المعرض</button></div>
+    ${picInputs('su')}
+    <div class="fl" style="margin-top:14px"><label for="suJob">المسمى الوظيفي <span class="muted small">(اختياري)</span></label><input id="suJob" placeholder="مثلاً: مهندس مدني" value="${esc(meEmp.jobTitle)}"></div>
+    <div class="fl"><label for="suPhone">رقم الجوال <span class="muted small">(اختياري)</span></label><input id="suPhone" type="tel" dir="ltr" placeholder="05xxxxxxxx" value="${esc(meEmp.phone)}"></div>
+    <button class="btn primary big" type="button" id="suSave" disabled>${ic('check', 18)} حفظ ومتابعة</button>
+    <div class="err" id="suErr">الصورة الشخصية مطلوبة</div>
+  </div>`;
+  const pick = () => $('suCam').click();
+  $('suPic').onclick = pick; $('suCamB').onclick = pick; $('suGalB').onclick = () => $('suGal').click();
+  bindPic('su', p => { pic = p; $('suPic').innerHTML = `<img src="${p.photo}" alt="">`; $('suPic').classList.add('has'); $('suSave').disabled = false; $('suErr').textContent = ''; });
+  $('suSave').onclick = async () => {
+    if (!pic) { $('suErr').textContent = 'الصورة الشخصية مطلوبة'; return; }
+    const b = $('suSave'); b.disabled = true; b.textContent = 'جارٍ الحفظ…';
+    try { await updateDoc(doc(db, 'employees', me.uid), { photo: pic.photo, photoSm: pic.photoSm, jobTitle: $('suJob').value.trim().slice(0, 60), phone: toEn($('suPhone').value.trim()).slice(0, 20), profileAt: serverTimestamp() }); justLoggedIn = true; toast('ok', 'تم حفظ صورتك', 'أهلاً بيك في بصمة الشمراني', 'حسابك'); }
+    catch (x) { $('suErr').textContent = errWhy(x); b.disabled = false; b.innerHTML = `${ic('check', 18)} حفظ ومتابعة`; }
+  };
+}
+// صفحة «حسابي»
+function renderMe() {
+  show('vMe'); const v = $('vMe'), e = meEmp; let pic = null;
+  v.innerHTML = `<section class="card reveal mecard">
+    <div class="mehead"><button type="button" class="bigpic has" id="mePic" aria-label="تغيير الصورة">${e.photo ? `<img src="${e.photo}" alt="">` : ic('user', 40)}<span class="camfab">${ic('camera', 16)}</span></button>
+     <div><b>${esc(e.name)}</b><small class="muted">${esc(e.jobTitle || '')}${e.jobTitle && e.dept ? ' · ' : ''}${esc(e.dept || '')}</small><small class="muted" dir="auto">${ic('user', 12)} ${esc(e.num)}</small></div></div>
+    <div class="row-btns" id="mePicBtns" hidden><button class="btn ghost" type="button" id="meCamB">${ic('camera', 15)} صوّر</button><button class="btn ghost" type="button" id="meGalB">${ic('image', 15)} من المعرض</button></div>
+    ${picInputs('me')}
+   </section>
+   <section class="card reveal" style="margin-top:14px"><h2>بياناتي</h2>
+    <p class="muted small" style="margin:0 0 10px">الاسم والقسم واسم المستخدم بيعدّلهم المدير.</p>
+    ${PROF_FIELDS.map(([k, l, ph, t]) => `<div class="fl"><label for="pf_${k}">${l}</label>${t === 'area' ? `<textarea id="pf_${k}" data-pf="${k}" rows="2" maxlength="300" placeholder="${ph}">${esc(e[k])}</textarea>` : `<input id="pf_${k}" data-pf="${k}" type="${t}" ${t === 'tel' || t === 'email' ? 'dir="ltr"' : ''} maxlength="${k === 'phone' ? 20 : 80}" placeholder="${ph}" value="${esc(e[k])}">`}</div>`).join('')}
+    <button class="btn primary" type="button" id="meSave" style="width:100%">${ic('check', 16)} حفظ البيانات</button><div class="err" id="meErr"></div>
+   </section>
+   <section class="card reveal" style="margin-top:14px"><h2>الحساب</h2>
+    <div class="melinks">
+     <button type="button" id="mePass">${ic('key', 18)}<span>تغيير كلمة السر</span>${ic('left', 14)}</button>
+     ${'Notification' in window && Notification.permission !== 'granted' ? `<button type="button" id="meNotif">${ic('bell', 18)}<span>فعّل الإشعارات على الجوال</span>${ic('left', 14)}</button>` : ''}
+     <button type="button" id="meOut" class="danger-t">${ic('logout', 18)}<span>تسجيل الخروج</span>${ic('left', 14)}</button>
+    </div>
+   </section>`;
+  $('mePic').onclick = () => { $('mePicBtns').hidden = !$('mePicBtns').hidden; };
+  $('meCamB').onclick = () => $('meCam').click(); $('meGalB').onclick = () => $('meGal').click();
+  bindPic('me', async p => {
+    $('mePic').innerHTML = `<img src="${p.photo}" alt=""><span class="camfab">${ic('camera', 16)}</span>`; $('mePicBtns').hidden = true;
+    try { await updateDoc(doc(db, 'employees', me.uid), { photo: p.photo, photoSm: p.photoSm, profileAt: serverTimestamp() }); toast('ok', 'تم تغيير صورتك', '', 'حسابك'); } catch (x) { toast('bad', 'تعذّر حفظ الصورة', errWhy(x), 'حسابك'); }
+  });
+  $('meSave').onclick = async () => {
+    const data = {}; v.querySelectorAll('[data-pf]').forEach(i => { let x = i.value.trim(); if (i.type === 'tel') x = toEn(x); data[i.dataset.pf] = x; });
+    if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) { $('meErr').textContent = 'البريد الإلكتروني مش صحيح'; return; }
+    const b = $('meSave'); b.disabled = true;
+    try { await updateDoc(doc(db, 'employees', me.uid), { ...data, profileAt: serverTimestamp() }); $('meErr').textContent = ''; toast('ok', 'تم حفظ بياناتك', '', 'حسابك'); } catch (x) { $('meErr').textContent = errWhy(x); } finally { b.disabled = false; }
+  };
+  $('mePass').onclick = openMyPass;
+  if ($('meNotif')) $('meNotif').onclick = () => { if (Notification.permission === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح إعدادات المتصفح ← الإشعارات واسمح للموقع', 'حسابك'); else Notification.requestPermission().then(renderMe); };
+  $('meOut').onclick = () => $('logoutBtn').click();
+}
+
 /* ----- الموظف يغيّر كلمة السر بنفسه ----- */
 function openMyPass() {
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
@@ -1033,6 +1154,15 @@ async function punch(method, thumb) {
 const b64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function bioVerify() {
+  if (NATIVE && NBio) {
+    try {
+      const av = await NBio.isAvailable(); if (!av || !av.isAvailable) { toast('warn', 'البصمة مش متفعّلة على الجوال', 'فعّل بصمة الإصبع من إعدادات الجوال، أو استخدم بصمة الوجه', 'الأمان'); return false; }
+      await NBio.verifyIdentity({ reason: 'تسجيل البصمة', title: 'بصمة الشمراني', subtitle: meEmp.name, negativeButtonText: 'إلغاء', maxAttempts: 3 });
+      const did = devId();
+      if (!meEmp.cred || !String(meEmp.cred).startsWith('and-')) { await updateDoc(doc(db, 'employees', me.uid), { cred: did }); toast('ok', 'تم ربط بصمتك بهذا الجوال', 'البصمات القادمة هتتطابق عليه', 'الأمان'); return true; }
+      return meEmp.cred === did ? true : 'other';
+    } catch (e) { return false; }
+  }
   const ch = crypto.getRandomValues(new Uint8Array(32));
   try {
     if (!meEmp.cred) {
@@ -1095,7 +1225,9 @@ function renderLive() {
     <div class="err" id="lvErr" style="text-align:center"></div>
     ${isSup(meEmp) ? `<button class="btn ghost big" id="visitBtn" type="button" style="margin-top:10px">${ic('camera', 18)} تسجيل زيارة موقع (صورة + الحي)</button>
     <div class="lvhead" style="margin-top:14px"><b>زياراتي النهارده</b></div><div id="myVisits" class="vlist"></div>` : ''}
-    <ul class="tips">
+    ${!NATIVE && IS_ANDROID ? `<a class="apkcard" href="${APK_URL}">${ic('download', 22)}<span><b>حمّل تطبيق الأندرويد</b><small>عشان اللايف لوكيشن يفضل شغال والشاشة مقفولة أو وإنت في تطبيق تاني</small></span></a>` : ''}
+    ${NATIVE ? `<p class="muted small" style="text-align:center;margin:10px 0 0">${ic('check', 13)} تطبيق الأندرويد: المشاركة بتفضل شغالة والشاشة مقفولة، وفيه إشعار ثابت لحد ما توقفها.</p>` : ''}
+    <ul class="tips" ${NATIVE ? 'hidden' : ''}>
       <li>خلّي التطبيق مفتوح والشاشة شغالة أثناء المشاركة. الجوال بيوقف الموقع لو التطبيق اتقفل أو الشاشة طفت.</li>
       <li>لو قفلت التطبيق وفتحته تاني، المشاركة بترجع تشتغل لوحدها.</li>
     </ul>
@@ -1139,13 +1271,21 @@ async function startLive(resume) {
   liveOn = true; try { localStorage.setItem('sh-live', '1'); } catch (e) { }
   try { await setDoc(doc(db, 'live', me.uid), { uid: me.uid, name: meEmp.name, dept: meEmp.dept || '', on: true, startedAt: serverTimestamp(), at: serverTimestamp(), ...(st ? { site: { district: st.district, note: st.note || '', thumb: st.thumb, media: mid } } : {}) }, { merge: true }); } catch (e) { }
   if (st) saveVisit(st, 'live', mid).catch(() => { });
-  watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  if (NATIVE && BGeo) {
+    try {
+      bgWatch = await BGeo.addWatcher({ backgroundTitle: 'اللايف لوكيشن شغّال', backgroundMessage: 'المالك شايف مكانك · افتح التطبيق عشان توقف المشاركة', requestPermissions: true, stale: false, distanceFilter: 10 }, (loc, err) => {
+        if (err) { if (err.code === 'NOT_AUTHORIZED') { toast('bad', 'اسمح للتطبيق باستخدام الموقع', 'من الإعدادات: الموقع ← السماح طوال الوقت', 'موقعي المباشر'); BGeo.openSettings().catch(() => { }); } return; }
+        if (loc) onFix({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed } });
+      });
+    } catch (e) { watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
+  } else watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
   keepAwake(); toast('live', 'بدأت مشاركة موقعك', 'المالك يقدر يشوف مكانك الآن', 'موقعي المباشر');
   if (view === 'vLive') renderLive(); paintTabs();
   onFix({ coords: { latitude: g0.lat, longitude: g0.lng, accuracy: g0.acc, speed: null } });
 }
 async function stopLive(user) {
   if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; liveOn = false;
+  if (bgWatch != null && BGeo) { BGeo.removeWatcher({ id: bgWatch }).catch(() => { }); bgWatch = null; }
   if (user) { try { localStorage.removeItem('sh-live'); } catch (e) { } }
   try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) { }
   if (me && meEmp && !canSee()) { try { await setDoc(doc(db, 'live', me.uid), { on: false, at: serverTimestamp() }, { merge: true }); } catch (e) { } }
@@ -1159,7 +1299,10 @@ async function onFix(pos) {
   if (moved >= 20 || since >= 30000) {
     lastSent = p; lastSentAt = Date.now();
     if (moved >= 15 || !livePath.length) { livePath.push({ lat: p.lat, lng: p.lng, t: p.t }); if (livePath.length > 120) livePath = livePath.slice(-120); }
-    try { await setDoc(doc(db, 'live', me.uid), { uid: me.uid, name: meEmp.name, dept: meEmp.dept || '', on: true, lat: p.lat, lng: p.lng, acc: p.acc, spd: p.spd, at: serverTimestamp(), path: livePath }, { merge: true }); } catch (e) { }
+    try {
+      if (NATIVE && NHttp && document.visibilityState === 'hidden') await liveRest(p);
+      else await setDoc(doc(db, 'live', me.uid), { uid: me.uid, name: meEmp.name, dept: meEmp.dept || '', on: true, lat: p.lat, lng: p.lng, acc: p.acc, spd: p.spd, bg: false, at: serverTimestamp(), path: livePath }, { merge: true });
+    } catch (e) { }
   }
   if (view === 'vLive') { placeMe(p); paintLiveStats(); }
 }
@@ -1168,7 +1311,7 @@ async function keepAwake() { try { if ('wakeLock' in navigator && document.visib
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (view === 'vChat') markChatRead();
-    if (liveOn) { keepAwake(); if (watchId == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
+    if (liveOn) { keepAwake(); if (watchId == null && bgWatch == null && navigator.geolocation) watchId = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }); }
     checkEmpReminders(); checkOwnerAlerts(); checkPrayer();
   }
 });
@@ -1391,7 +1534,7 @@ function renderChat() {
   $('chatForm').onsubmit = async e => {
     e.preventDefault(); const text = ta.value.trim(); if (!text) return;
     ta.value = ''; ta.oninput();
-    try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), owner: isOwner, text, at: serverTimestamp() }); }
+    try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), ph: (!canSee() && meEmp.photoSm) || null, owner: isOwner, text, at: serverTimestamp() }); }
     catch (err) { toast('bad', 'لم تُرسل الرسالة', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); ta.value = text; }
   };
   $('msgs').onclick = async e => {
@@ -1445,7 +1588,7 @@ function paintChat(jump) {
   msgs.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${clockFmt.format(new Date(m.atMs))}${isOwner ? ` <button data-del="${m.id}" aria-label="حذف الرسالة">${ic('trash', 12)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${clockFmt.format(new Date(m.atMs))}${isOwner ? ` <button data-del="${m.id}" aria-label="حذف الرسالة">${ic('trash', 12)}</button>` : ''}</div></div>`;
   });
   box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
@@ -1529,7 +1672,7 @@ async function packImage(file) {
 async function sendMedia(kind, data, extra) {
   const ref = await addDoc(collection(db, 'media'), { uid: me.uid, kind, data, at: serverTimestamp() });
   mediaCache[ref.id] = Promise.resolve(data);
-  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, fname: extra.fname || null, size: extra.size || null, at: serverTimestamp() });
+  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), ph: (!canSee() && meEmp.photoSm) || null, owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, fname: extra.fname || null, size: extra.size || null, at: serverTimestamp() });
 }
 const REC_MAX = 120;
 let rec = null;
@@ -1622,7 +1765,7 @@ function renderOwner() {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
       const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '');
-      const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop(); const lv = fresh(lives[e.id]);
+      const av = e.photoSm || e.photo || (r && ALL.map(f => r.ph[f]).filter(Boolean).pop()); const lv = fresh(lives[e.id]);
       return `<button class="emp" data-emp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span></div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
     }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : isViewer ? 'لا يوجد موظفون بعد' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
     ${isViewer ? '' : `<form class="form addform" id="addForm" novalidate>
@@ -1699,12 +1842,12 @@ function openSheet(id) {
   const emp = empById(id); if (!emp) return; sheetEmp = id; liveSheetId = null;
   if (isViewer) {
     const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'), r = getRec(emp, todayKey()), av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
-    inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.dept || '')}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div><div class="card" style="padding:16px"><div id="shProf"></div></div>`;
+    inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.dept || '')}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>${profInfo(emp)}<div class="card" style="padding:16px"><div id="shProf"></div></div>`;
     sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
-    mountProfile($('shProf'), emp, true); $('shClose').onclick = closeSheet; sc.onclick = closeSheet; return;
+    mountProfile($('shProf'), emp, true); $('shClose').onclick = closeSheet; sc.onclick = closeSheet; const vp = inner.querySelector('.profpic[data-full]'); if (vp) vp.onclick = () => openViewer(vp.dataset.full); return;
   }
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner');
-  const r = getRec(emp, todayKey()); const av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
+  const r = getRec(emp, todayKey()); const av = emp.photo || (r && ALL.map(f => r.ph[f]).filter(Boolean).pop());
   const g = emp.geo || { mode: 'sites' }, ids = Array.isArray(g.ids) ? g.ids : sites().map(s => s.id);
   const lv = lives[emp.id];
   inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.num)}</span></b>
@@ -1721,6 +1864,7 @@ function openSheet(id) {
      <label class="radio"><input type="radio" name="gm" value="any" ${g.mode === 'any' ? 'checked' : ''}><span>من أي مكان</span></label>
      <button class="btn primary" id="shGeoSave" type="button" style="margin-top:10px">حفظ الصلاحية</button>
     </div>
+    ${profInfo(emp)}
     <div class="card pwcard" style="padding:14px;margin:0 0 12px">
      <b class="gt">${ic('key', 16)} اسم المستخدم وكلمة السر</b>
      <div class="pwrow"><span class="muted small">اسم المستخدم</span><b dir="auto">${esc(emp.num)}</b></div>
@@ -1758,6 +1902,7 @@ function openSheet(id) {
   };
   const sl = $('shLive'); if (sl) sl.onclick = () => { closeSheet(); renderMap(); setTimeout(() => { const l = lives[emp.id]; if (ownMap && l) ownMap.setView([l.lat, l.lng], 17); }, 900); };
   $('shActive').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { active: !emp.active }); closeSheet(); toast('ok', emp.active ? 'تم إيقاف حساب ' + emp.name : 'تم تفعيل حساب ' + emp.name, '', 'الإدارة'); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
+  const pp = inner.querySelector('.profpic[data-full]'); if (pp) pp.onclick = () => openViewer(pp.dataset.full);
   // كلمة السر: المالك يشوفها ويغيّرها
   let curPw = null, pwShown = false;
   getDoc(doc(db, 'secrets', emp.id)).then(d => { curPw = d.exists() ? d.data().pw : null; if (!curPw && $('pwCur')) { $('pwCur').textContent = 'مش متسجّلة'; $('pwCur').classList.add('muted'); } }).catch(() => { });
@@ -2156,7 +2301,7 @@ function refresh() {
 }
 
 onAuthStateChanged(auth, u => {
-  const wasLive = liveOn; if (wasLive) { if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; liveOn = false; }
+  const wasLive = liveOn; if (wasLive) { if (watchId != null) navigator.geolocation.clearWatch(watchId); watchId = null; liveOn = false; if (bgWatch != null && BGeo) { BGeo.removeWatcher({ id: bgWatch }).catch(() => { }); bgWatch = null; } }
   stopAll();
   if (!u) { me = null; isOwner = false; isViewer = false; renderLogin(); return; }
   me = u; isOwner = u.uid === OWNER_UID; isViewer = false;
@@ -2194,7 +2339,8 @@ function startSession(u) {
       $('userChip').textContent = meEmp.name;
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
-      if (first || !['vEmp', 'vLive', 'vChat'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
+      if (!meEmp.photo) { if (view !== 'vSetup') renderSetup(); first = true; return; }
+      if (first || !['vEmp', 'vLive', 'vChat', 'vMe'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
       else if (view === 'vEmp') updateEmpLive(true);
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('uid', '==', u.uid)), onDays, () => { }));
@@ -2239,6 +2385,7 @@ paintThemeBtns();
 
 /* ----- تنبيه: افتح التطبيق من الهوم سكرين عشان يفضل مسجّل ويشتغل أحسن ----- */
 (() => {
+  if (NATIVE) return;
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const mobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
   let hide = false; try { hide = sessionStorage.getItem('sh-inst-hide') === '1'; } catch (e) { }
@@ -2251,7 +2398,7 @@ paintThemeBtns();
 })();
 
 /* ========== boot ========== */
-(async () => { try { if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) { window.__bio = true; if (view === 'vEmp' && !busy) renderEmp(); } } catch (e) { } })();
+(async () => { try { if (NATIVE && NBio) { const av = await NBio.isAvailable().catch(() => null); if (av && av.isAvailable) { window.__bio = true; if (view === 'vEmp' && !busy) renderEmp(); } return; } if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) { window.__bio = true; if (view === 'vEmp' && !busy) renderEmp(); } } catch (e) { } })();
 if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => { }));
 setDates(); tickClock();
 setInterval(() => { tickClock(); if (view === 'vEmp') updateEmpLive(false); }, 1000);
