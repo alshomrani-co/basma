@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=15';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=16';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -197,7 +197,7 @@ function docToRec(d) {
 function empFromDoc(s) {
   const d = s.data();
   const created = d.createdAt && d.createdAt.toMillis ? keyOfIdx(dayIdx(d.createdAt.toMillis())) : todayKey();
-  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', emergency: d.emergency || '', about: d.about || '' };
+  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', emergency: d.emergency || '', about: d.about || '' };
 }
 
 /* ========== day logic ========== */
@@ -677,7 +677,6 @@ function renderEmp() {
       <button class="btn ghost" id="bFp"${window.__bio ? '' : ' hidden'}>${ic('finger', 18)} ${esc(T('fpBtn'))}</button>
      </div>
      <div class="devline" id="devline"></div>
-     <button class="linkbtn" id="myPassBtn" type="button">${ic('key', 14)} تغيير كلمة السر</button>
      <div class="devline">${ic('pin', 13)} ${esc(geoRuleText(emp))}</div>
      <button class="livecta ${liveOn ? 'on' : ''}" id="liveCta" type="button"><span class="lc-ic">${ic('live', 22)}</span><span class="lc-tx"><b>${esc(liveOn ? T('liveOn') : T('liveStart'))}</b><small>${liveOn ? 'المالك شايف مكانك الآن · اضغط للتفاصيل' : 'شارك مكانك المباشر مع المالك'}</small></span>${ic('left', 18)}</button>
      <div id="lateSlot">${lateCardHTML()}</div>
@@ -691,7 +690,7 @@ function renderEmp() {
     <div id="myProf"></div>
    </section></div>`;
   mountProfile($('myProf'), emp, false);
-  bindScan(); bindNotifCta(); updateEmpLive(true); updateBands(); bindLateCard(); $('myPassBtn').onclick = openMyPass;
+  bindScan(); bindNotifCta(); updateEmpLive(true); updateBands(); bindLateCard();
   $('liveCta').onclick = () => { vibrate(15); openTab('vLive'); if (!liveOn) startLive(); };
 }
 function bindLateCard() { const c = $('lateCard'); if (c) c.onclick = () => { const L = lateInfo(); if (L) openLateSheet(L.f, L.by); }; }
@@ -845,7 +844,7 @@ function checkPrayer() {
 }
 
 /* ========== الملف الشخصي للموظف ========== */
-const PROF_FIELDS = [['jobTitle', 'المسمى الوظيفي', 'مثلاً: مهندس مدني', 'text'], ['phone', 'رقم الجوال', '05xxxxxxxx', 'tel'], ['email', 'البريد الإلكتروني', 'name@example.com', 'email'], ['city', 'السكن (الحي / المدينة)', 'مثلاً: حي الملقا، الرياض', 'text'], ['emergency', 'رقم للطوارئ', 'اسم وقرابة ورقم', 'text'], ['about', 'نبذة', 'خبرتك أو تخصصك', 'area']];
+const PROF_FIELDS = [['jobTitle', 'المسمى الوظيفي', 'مثلاً: مهندس مدني', 'text'], ['phone', 'رقم الجوال', '05xxxxxxxx', 'tel'], ['email', 'البريد الإلكتروني', 'name@example.com', 'email'], ['city', 'العنوان', 'مثلاً: حي الملقا، شارع ...، الرياض', 'text'], ['birth', 'تاريخ الميلاد', '', 'date'], ['emergency', 'رقم للطوارئ', 'اسم وقرابة ورقم', 'text'], ['about', 'نبذة', 'خبرتك أو تخصصك', 'area']];
 function profInfo(emp) {
   const rows = PROF_FIELDS.filter(([k]) => emp[k]).map(([k, l]) => `<div class="pwrow"><span class="muted small">${l}</span><b dir="auto">${k === 'phone' ? `<a href="tel:${esc(emp.phone)}">${esc(emp.phone)}</a>` : k === 'email' ? `<a href="mailto:${esc(emp.email)}">${esc(emp.email)}</a>` : esc(emp[k])}</b></div>`).join('');
   return `<div class="card profcard" style="padding:14px;margin:0 0 12px"><div class="profhead">${emp.photo ? `<button type="button" class="profpic" data-full="${emp.photo}" aria-label="تكبير الصورة"><img src="${emp.photo}" alt=""></button>` : `<div class="profpic none">${ic('user', 30)}</div>`}<div><b>${esc(emp.name)}</b><small class="muted">${esc(emp.jobTitle || emp.dept || '')}</small>${emp.photo ? '' : '<small class="lnote">لسه ما حطّش صورته</small>'}</div></div>${rows || '<p class="muted small" style="margin:8px 0 0">الموظف لسه ما كتبش بياناته.</p>'}</div>`;
@@ -894,13 +893,20 @@ function renderMe() {
     ${picInputs('me')}
    </section>
    <section class="card reveal" style="margin-top:14px"><h2>بياناتي</h2>
-    <p class="muted small" style="margin:0 0 10px">الاسم والقسم واسم المستخدم بيعدّلهم المدير.</p>
+    <p class="muted small" style="margin:0 0 10px">القسم واسم المستخدم بيعدّلهم المدير.</p>
+    <div class="fl"><label for="pf_name">الاسم</label><input id="pf_name" data-pf="name" maxlength="60" value="${esc(e.name)}"></div>
     ${PROF_FIELDS.map(([k, l, ph, t]) => `<div class="fl"><label for="pf_${k}">${l}</label>${t === 'area' ? `<textarea id="pf_${k}" data-pf="${k}" rows="2" maxlength="300" placeholder="${ph}">${esc(e[k])}</textarea>` : `<input id="pf_${k}" data-pf="${k}" type="${t}" ${t === 'tel' || t === 'email' ? 'dir="ltr"' : ''} maxlength="${k === 'phone' ? 20 : 80}" placeholder="${ph}" value="${esc(e[k])}">`}</div>`).join('')}
     <button class="btn primary" type="button" id="meSave" style="width:100%">${ic('check', 16)} حفظ البيانات</button><div class="err" id="meErr"></div>
    </section>
+   <section class="card reveal" style="margin-top:14px"><h2>${ic('key', 18)} تغيير كلمة السر</h2>
+    <div class="fl"><label for="mpOld">كلمة السر الحالية</label><input id="mpOld" type="password" autocomplete="current-password"></div>
+    <div class="fl"><label for="mpNew">كلمة السر الجديدة</label><input id="mpNew" type="password" autocomplete="new-password" placeholder="٦ حروف أو أرقام على الأقل"></div>
+    <div class="fl"><label for="mpNew2">تأكيد كلمة السر الجديدة</label><input id="mpNew2" type="password" autocomplete="new-password"></div>
+    <button class="btn primary" id="mpSave" type="button" style="width:100%">${ic('check', 16)} حفظ كلمة السر</button>
+    <div class="err" id="mpErr"></div>
+   </section>
    <section class="card reveal" style="margin-top:14px"><h2>الحساب</h2>
     <div class="melinks">
-     <button type="button" id="mePass">${ic('key', 18)}<span>تغيير كلمة السر</span>${ic('left', 14)}</button>
      ${'Notification' in window && Notification.permission !== 'granted' ? `<button type="button" id="meNotif">${ic('bell', 18)}<span>فعّل الإشعارات على الجوال</span>${ic('left', 14)}</button>` : ''}
      <button type="button" id="meOut" class="danger-t">${ic('logout', 18)}<span>تسجيل الخروج</span>${ic('left', 14)}</button>
     </div>
@@ -913,11 +919,12 @@ function renderMe() {
   });
   $('meSave').onclick = async () => {
     const data = {}; v.querySelectorAll('[data-pf]').forEach(i => { let x = i.value.trim(); if (i.type === 'tel') x = toEn(x); data[i.dataset.pf] = x; });
+    if ((data.name || '').length < 2) { $('meErr').textContent = 'اكتب اسمك'; return; }
     if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) { $('meErr').textContent = 'البريد الإلكتروني مش صحيح'; return; }
     const b = $('meSave'); b.disabled = true;
     try { await updateDoc(doc(db, 'employees', me.uid), { ...data, profileAt: serverTimestamp() }); $('meErr').textContent = ''; toast('ok', 'تم حفظ بياناتك', '', 'حسابك'); } catch (x) { $('meErr').textContent = errWhy(x); } finally { b.disabled = false; }
   };
-  $('mePass').onclick = openMyPass;
+  bindPassForm(() => { ['mpOld', 'mpNew', 'mpNew2'].forEach(x => $(x).value = ''); });
   if ($('meNotif')) $('meNotif').onclick = () => { if (Notification.permission === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح إعدادات المتصفح ← الإشعارات واسمح للموقع', 'حسابك'); else Notification.requestPermission().then(renderMe); };
   $('meOut').onclick = () => $('logoutBtn').click();
 }
@@ -933,6 +940,9 @@ function openMyPass() {
     <div class="err" id="mpErr"></div>`;
   sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
   $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+  bindPassForm(closeSheet);
+}
+function bindPassForm(done) {
   $('mpSave').onclick = async () => {
     const o = $('mpOld').value, a = $('mpNew').value, b2 = $('mpNew2').value, er = $('mpErr'); er.textContent = '';
     if (!o) { er.textContent = 'اكتب كلمة السر الحالية'; return; }
@@ -943,7 +953,7 @@ function openMyPass() {
       await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, o));
       await updatePassword(auth.currentUser, a);
       if (!isOwner) setDoc(doc(db, 'secrets', me.uid), { pw: a, at: serverTimestamp() }).catch(() => { });
-      closeSheet(); toast('ok', 'تم تغيير كلمة السر', 'استخدمها المرة الجاية وإنت بتدخل', 'حسابك');
+      done(); toast('ok', 'تم تغيير كلمة السر', 'استخدمها المرة الجاية وإنت بتدخل', 'حسابك');
     } catch (x) { const c = x && x.code || ''; er.textContent = /wrong-password|invalid-credential/.test(c) ? 'كلمة السر الحالية غلط' : authMsg(x); }
     finally { btn.disabled = false; }
   };
@@ -961,13 +971,11 @@ function openLog() {
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'), l = getLog(); sheetEmp = null; liveSheetId = null;
   inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--gold);color:#fff">${ic('bell', 22)}</div><b>الإشعارات <span class="muted small">${ar(l.length)}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
     ${'Notification' in window && Notification.permission !== 'granted' ? `<button class="btn primary" id="lgAsk" type="button" style="width:100%;margin-bottom:10px">${ic('bell', 16)} فعّل الإشعارات على الجوال</button>` : ''}
-    ${!canSee() ? `<button class="btn ghost" id="lgPass2" type="button" style="width:100%;margin-bottom:10px">${ic('key', 16)} تغيير كلمة السر</button>` : ''}
     <div class="loglist">${l.length ? l.map((x, i) => `<button type="button" class="logi" data-i="${i}"><span class="ico i-${({ live: 'info', chat: 'gold', pray: 'ok' })[x.k] || esc(x.k)}">${ic(LOG_IC[x.k] || 'bell', 15)}</span><span class="lt"><b>${esc(x.t)}</b>${x.b ? `<small>${esc(x.b)}</small>` : ''}</span><small class="muted">${ago(x.at)}</small></button>`).join('') : '<p class="muted small" style="text-align:center;padding:20px">مفيش إشعارات لسه</p>'}</div>
     ${l.length ? `<button class="btn ghost" id="lgClear" type="button" style="width:100%;margin-top:10px">${ic('trash', 15)} مسح الكل</button>` : ''}`;
   sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
   $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
   if ($('lgAsk')) $('lgAsk').onclick = () => { if (Notification.permission === 'denied') toast('warn', 'الإشعارات مقفولة من إعدادات الجوال', 'افتح إعدادات المتصفح ← الإشعارات، واسمح للموقع', 'الإشعارات'); else askNotify(); closeSheet(); };
-  if ($('lgPass2')) $('lgPass2').onclick = () => { closeSheet(); setTimeout(openMyPass, 480); };
   if ($('lgClear')) $('lgClear').onclick = () => { try { localStorage.removeItem(logKey()); } catch (e) { } paintBell(); closeSheet(); };
   inner.querySelector('.loglist').onclick = e => { const b = e.target.closest('[data-i]'); if (!b) return; const x = l[+b.dataset.i]; closeSheet(); if (x && x.g) setTimeout(() => goTo(x.g), 300); };
 }
