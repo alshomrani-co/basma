@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=21">
+<link rel="manifest" href="manifest.json?v=23">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -750,6 +750,27 @@ body.chatmode .chatcard h2{margin-bottom:6px}
 .scan.tappable:active{transform:scale(.97)}
 .ctlbox select{width:100%}
 .ctlbox .sched{display:flex;flex-direction:column;gap:8px}
+
+.schsum{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--surface2);font-size:13px}
+.schsum b{display:block;font-size:12.5px;margin-bottom:6px;color:var(--muted)}
+.schsum div{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.schsum div:last-child{border-bottom:0}.schsum div span:last-child{font-weight:600;direction:rtl}
+
+/* online */
+.onl{display:inline-flex;align-items:center;gap:5px;font-style:normal;font-size:11.5px;font-weight:700;color:#1f8a4c;background:rgba(47,168,102,.14);border-radius:999px;padding:2px 9px;direction:ltr}
+.onl b{width:7px;height:7px;border-radius:50%;background:#2fa866;box-shadow:0 0 0 0 rgba(47,168,102,.6);animation:onlp 1.6s infinite}
+@keyframes onlp{0%{box-shadow:0 0 0 0 rgba(47,168,102,.6)}70%{box-shadow:0 0 0 7px rgba(47,168,102,0)}100%{box-shadow:0 0 0 0 rgba(47,168,102,0)}}
+.seg button.on .onl{background:#fff;color:#1f8a4c}
+/* الأقسام */
+.drow{padding:10px 0;border-bottom:1px solid var(--line)}
+.drow:last-child{border-bottom:0}
+.drow .dh{display:flex;align-items:center;gap:8px}
+.drow .dname{flex:1;min-width:0;font-weight:600;padding:8px 10px;border-radius:10px;border:1px solid transparent;background:transparent;font-size:15px;color:var(--fg)}
+.drow .dname:focus{border-color:var(--line);background:var(--surface2)}
+.drow .dt{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.dchip{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;cursor:pointer;color:var(--muted);user-select:none}
+.dchip input{position:absolute;opacity:0;pointer-events:none}
+.dchip.on{background:rgba(47,138,61,.12);border-color:rgba(47,138,61,.4);color:#23763a;font-weight:600}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -820,6 +841,6 @@ body.chatmode .chatcard h2{margin-bottom:6px}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=21"></script>
+<script type="module" src="app.js?v=23"></script>
 </body>
 </html>

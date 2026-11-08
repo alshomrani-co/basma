@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=21';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=23';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -15,7 +15,10 @@ catch (e) { db = initializeFirestore(app, {}); }
 
 /* ========== constants ========== */
 let COMPANY = 'شركة سعد مفرح الشمراني للاستشارات الهندسية';
-const DEPTS = ['المساحة', 'المعماري', 'الإنشائي', 'السلامة', 'الثلاثي الأبعاد', 'المحاسب', 'الإشراف'];
+const DEPTS0 = ['المساحة', 'المعماري', 'الإنشائي', 'السلامة', 'الثلاثي الأبعاد', 'المحاسب', 'الإشراف'];
+const deptList = () => (typeof settings !== 'undefined' && Array.isArray(settings.depts) && settings.depts.length) ? settings.depts : DEPTS0;
+// قواعد كل قسم: صورة مع الحضور، صورة مع اللايف، تسجيل من أي مكان
+const deptRule = name => { const r = (typeof settings !== 'undefined' && settings.deptRules && settings.deptRules[name]) || null; return r || (name === 'الإشراف' ? { punch: true, live: true, any: true } : { punch: false, live: false, any: false }); };
 const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const DAY_ORDER = [6, 0, 1, 2, 3, 4, 5];
 // مواعيد العمل الافتراضية (المالك يقدر يغيّرها من الإعدادات)
@@ -78,6 +81,7 @@ const I = {
   mail: "M3 6h18v12H3zM3 7l9 6 9-6",
   dots: "M5 12h.01M12 12h.01M19 12h.01",
   heart: "M12 20s-7-4.4-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 5c-2.3 4.6-9.3 9-9.3 9z",
+  users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M2 21a7 7 0 0 1 14 0M16 3.1a4 4 0 0 1 0 7.8M22 21a7 7 0 0 0-5-6.7",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -166,7 +170,7 @@ function lvlOf(f, t, P) {
   return 'n';
 }
 const tv = (f, r, P, withLbl) => `<span class="tv tv-${lvlOf(f, r[f], P) || 'n'}">${withLbl ? FL[f] + ' ' : ''}${tm(r[f])}${r.m && r.m[f] === 'auto' ? ' <i>تلقائي</i>' : ''}</span>`;
-const isSup = e => !!e && e.dept === 'الإشراف';
+const isSup = e => !!e && !!deptRule(e.dept).any;
 const sites = () => Array.isArray(settings.sites) ? settings.sites : [];
 
 /* ========== schedule ========== */
@@ -421,10 +425,10 @@ function paintTabs() {
   const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
-  if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && isSup(meEmp) ? 'الإشراف' : tabs[i][2]))) {
+  if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite') ? 'الإشراف' : tabs[i][2]))) {
     btns.forEach((b, i) => { const v = tabs[i][0]; b.setAttribute('aria-current', view === v ? 'page' : 'false'); b.querySelectorAll('.badge,.livedot').forEach(x => x.remove()); b.insertAdjacentHTML('beforeend', extra(v)); });
   } else {
-    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && isSup(meEmp) ? [v, 'helmet', 'الإشراف'] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
+    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && siteRule(meEmp, 'liveSite') ? [v, 'helmet', 'الإشراف'] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
   }
   tabIntro();
 }
@@ -676,7 +680,7 @@ function mountProfile(root, emp, withPhotos) {
 /* ========== employee ========== */
 function geoRuleText(emp) {
   const g = emp.geo || { mode: 'sites' };
-  if (isSup(emp)) return 'قسم الإشراف: مسموح تسجّل من أي مكان، بصورة الموقع واسم الحي';
+  if (isSup(emp)) return 'قسم ' + (emp.dept || '') + ': مسموح تسجّل من أي مكان' + (siteRule(emp, 'punchSite') ? '، بصورة الموقع واسم الحي' : '');
   if (g.mode === 'any') return 'مسموح لك تسجّل الحضور من أي مكان';
   const list = allowedSites(emp);
   if (!sites().length) return 'لم يحدد المالك موقع عمل بعد';
@@ -1226,7 +1230,7 @@ function openLog() {
 
 /* ----- قسم الإشراف: صورة الموقع واسم الحي قبل الحضور واللايف ----- */
 let pendingSite = null, myVisits = [], visits = [], visitsFirst = true, mapTab = 'live';
-const siteRule = (e, k) => e && e[k] === 'on' ? true : e && e[k] === 'off' ? false : isSup(e);
+const siteRule = (e, k) => e && e[k] === 'on' ? true : e && e[k] === 'off' ? false : !!(e && deptRule(e.dept)[k === 'punchSite' ? 'punch' : 'live']);
 const needSite = f => (f === 'in' || f === 'in2') && siteRule(meEmp, 'punchSite');
 const VK = { in: 'حضور', in2: 'عودة من البريك', live: 'بدء لايف لوكيشن', visit: 'زيارة موقع' };
 const geoCache = {};
@@ -1470,22 +1474,24 @@ function renderLive() {
   show('vLive');
   const v = $('vLive');
   v.innerHTML = `<section class="card reveal">
-    <h2>${isSup(meEmp) ? 'الإشراف · ' : ''}موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
+    <h2>${siteRule(meEmp, 'liveSite') ? 'الإشراف · ' : ''}موقعي المباشر <span class="chip ${liveOn ? 'c-present' : 'c-off'}" id="lvChip">${liveOn ? 'المشاركة شغالة' : 'متوقف'}</span></h2>
     <p class="muted small" style="margin:0 0 12px">${siteRule(meEmp, 'liveSite') ? 'لازم صورة الموقع واسم الحي قبل ما يبدأ اللايف' + (siteRule(meEmp, 'punchSite') ? ' أو يتسجّل الحضور' : '') + (isSup(meEmp) ? '. تقدر تسجّل من أي مكان على الخريطة.' : '.') : 'لما تشغّل المشاركة، المالك يشوف مكانك على الخريطة لحظة بلحظة، ويوصله إشعار بكل تحديث.'}</p>
     <div class="map" id="myMap"></div>
     <div class="livestats"><div><span>آخر تحديث</span><b id="lvAt">—</b></div><div><span>دقة الموقع</span><b id="lvAcc">—</b></div><div><span>المكان</span><b id="lvPlace">—</b></div></div>
     <button class="btn ${liveOn ? 'ghost' : 'primary'} big" id="lvBtn">${ic('live', 20)} ${liveOn ? 'إيقاف مشاركة الموقع' : 'ابدأ لايف لوكيشن'}</button>
     <div class="err" id="lvErr" style="text-align:center"></div>
-    ${isSup(meEmp) ? `<button class="btn ghost big" id="visitBtn" type="button" style="margin-top:10px">${ic('camera', 18)} تسجيل زيارة موقع (صورة + الحي)</button>
+    ${siteRule(meEmp, 'liveSite') || isSup(meEmp) ? `<button class="btn ghost big" id="visitBtn" type="button" style="margin-top:10px">${ic('camera', 18)} تسجيل زيارة موقع (صورة + الحي)</button>
     <div class="lvhead" style="margin-top:14px"><b>زياراتي النهارده</b></div><div id="myVisits" class="vlist"></div>` : ''}
     ${!NATIVE && IS_ANDROID ? `<a class="apkcard" href="${APK_URL}">${ic('download', 22)}<span><b>حمّل تطبيق الأندرويد</b><small>عشان اللايف لوكيشن يفضل شغال والشاشة مقفولة أو وإنت في تطبيق تاني</small></span></a>` : ''}
-    ${NATIVE ? `<p class="muted small" style="text-align:center;margin:10px 0 0">${ic('check', 13)} تطبيق الأندرويد: المشاركة بتفضل شغالة والشاشة مقفولة، وفيه إشعار ثابت لحد ما توقفها.</p>` : ''}
+    ${NATIVE ? `<p class="muted small" style="text-align:center;margin:10px 0 0">${ic('check', 13)} تطبيق الأندرويد: المشاركة بتفضل شغالة والشاشة مقفولة أو بعد الخروج من التطبيق، وفيه إشعار ثابت لحد ما توقفها بنفسك.</p>
+    <button class="btn ghost" type="button" id="natSet" style="width:100%;margin-top:8px">${ic('gear', 16)} إعدادات التطبيق: الموقع «طوال الوقت» والبطارية «غير مقيّد»</button>` : ''}
     <ul class="tips" ${NATIVE ? 'hidden' : ''}>
       <li>خلّي التطبيق مفتوح والشاشة شغالة أثناء المشاركة. الجوال بيوقف الموقع لو التطبيق اتقفل أو الشاشة طفت.</li>
       <li>لو قفلت التطبيق وفتحته تاني، المشاركة بترجع تشتغل لوحدها.</li>
     </ul>
   </section>`;
   $('lvBtn').onclick = () => { vibrate(20); liveOn ? stopLive(true) : startLive(); };
+  if ($('natSet')) $('natSet').onclick = () => BGeo && BGeo.openSettings().catch(() => { });
   if ($('visitBtn')) { $('visitBtn').onclick = recordVisit; bindVisitImgs($('myVisits')); paintMyVisits(); }
   loadLeaflet().then(L => {
     if (view !== 'vLive') return;
@@ -1618,7 +1624,23 @@ function onLive(snap) {
   liveFirst = false;
   if (view === 'vMap') paintMap();
 }
-const placeName = l => { const s = siteAt(l); return s ? 'في ' + s.s.name : 'خارج مواقع العمل'; };
+// العنوان (الحي والشارع) بيتجاب من الخريطة ويتحدّث مع حركة الموظف
+const addrCache = {}, addrQ = []; let addrBusy = false;
+const addrKey = l => (Math.round(l.lat * 2000) / 2000).toFixed(4) + ',' + (Math.round(l.lng * 2000) / 2000).toFixed(4);
+function addrOf(l) { if (!l || l.lat == null) return false; const k = addrKey(l); if (k in addrCache) return addrCache[k]; if (!addrQ.includes(k)) { addrQ.push(k); pumpAddr(); } return null; }
+async function pumpAddr() {
+  if (addrBusy || !addrQ.length) return; addrBusy = true; const k = addrQ.shift(), [lat, lng] = k.split(',').map(Number);
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 8000);
+    const j = await (await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ar`, { signal: ctl.signal })).json();
+    const a = j.address || {}, hood = a.neighbourhood || a.suburb || a.quarter || a.city_district || a.residential || '', street = a.road || a.pedestrian || a.footway || a.street || '';
+    addrCache[k] = { hood: hood ? (/^حي\s/.test(hood) ? hood : 'حي ' + hood) : '', street, city: a.city || a.town || a.village || '' };
+  } catch (e) { addrCache[k] = false; }
+  setTimeout(() => { addrBusy = false; if (view === 'vMap' && mapTab === 'live') { paintMap(); if (liveSheetId) paintLiveSheet(); } pumpAddr(); }, 1100);
+}
+const addrTxt = l => { const a = addrOf(l); if (a === null) return 'جارٍ تحديد العنوان…'; if (!a) return ''; return [a.hood, a.street].filter(Boolean).join('، ') || a.city; };
+const placeName = l => { const s = siteAt(l), a = addrOf(l), t = a ? [a.hood, a.street].filter(Boolean).join('، ') : ''; return (s ? 'في ' + s.s.name : '') + (s && t ? ' · ' : '') + (t || (s ? '' : 'خارج مواقع العمل')); };
+const online = l => l && l.on && l.atMs && (Date.now() - l.atMs) < 30 * 60000;
 // بيتحرك ولا واقف: من السرعة أو من آخر نقطتين في المسار
 function motion(l) {
   if (!fresh(l)) return l.on ? { txt: 'منقطع', cls: 'c-missing', moving: false } : { txt: 'متوقف', cls: 'c-off', moving: false };
@@ -1652,7 +1674,8 @@ function paintLiveSheet() {
     <button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
     <div class="lvstate ${st.moving ? 'mv' : ''}"><span class="pulse"></span><b>${st.txt}</b>${st.moving && st.speed ? `<span>· ${ar(st.speed)} كم/س</span>` : ''}<small>${fresh(l) ? 'لايف الآن' : 'آخر تحديث ' + ago(l.atMs)}</small></div>
     <div class="lvgrid">
-     <div><span>المكان</span><b>${s ? esc(s.s.name) : 'خارج مواقع العمل'}</b></div>
+     <div class="wide"><span>العنوان الآن (الحي والشارع)</span><b>${esc(addrTxt(l) || '—')}</b></div>
+     <div><span>موقع العمل</span><b>${s ? esc(s.s.name) : 'خارج مواقع العمل'}</b></div>
      <div><span>أقرب موقع عمل</span><b>${near ? esc(near.x.name) + ' · ' + (near.d >= 1000 ? ar(+(near.d / 1000).toFixed(1)) + ' كم' : ar(Math.round(near.d)) + ' م') : '—'}</b></div>
      <div><span>آخر تحديث</span><b>${ago(l.atMs)} · ${clockFmt.format(new Date(l.atMs))}</b></div>
      <div><span>دقة الموقع</span><b>±${ar(l.acc || 0)} م</b></div>
@@ -1672,8 +1695,10 @@ const liveEvery = () => { try { return localStorage.getItem('sh-live-every') !==
 function renderMap() {
   show('vMap');
   const v = $('vMap');
-  const todayN = visits.filter(x => x.day === todayIdx()).length;
-  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('map', 16)} الخريطة المباشرة</button><button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic('helmet', 16)} الإشراف${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button></div>`;
+  let vSeen = 0; try { vSeen = +(localStorage.getItem('sh-vseen-' + me.uid) || 0); } catch (e) { }
+  if (mapTab === 'visits') { vSeen = Date.now(); try { localStorage.setItem('sh-vseen-' + me.uid, String(vSeen)); } catch (e) { } }
+  const todayN = visits.filter(x => x.day === todayIdx() && x.atMs > vSeen).length, onN = Object.values(lives).filter(online).length;
+  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('map', 16)} الخريطة المباشرة${onN ? ` <i class="onl"><b></b>${ar(onN)} online</i>` : ''}</button><button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic('helmet', 16)} الإشراف${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button></div>`;
   if (mapTab === 'visits') {
     v.innerHTML = seg + `<section class="card reveal" style="margin-top:12px">
       <h2>تسجيلات قسم الإشراف <span class="muted small" id="vsCount" style="font-family:var(--f-body)"></span></h2>
@@ -1708,7 +1733,7 @@ function paintMap(fit) {
   if (view !== 'vMap') return;
   const arr = Object.values(lives).filter(l => l.lat != null).sort((a, b) => (fresh(b) - fresh(a)) || (b.atMs - a.atMs));
   const onCount = arr.filter(fresh).length;
-  $('mpCount').textContent = ar(onCount) + ' يشارك الآن';
+  $('mpCount').innerHTML = `<i class="onl"><b></b>${ar(Object.values(lives).filter(online).length)} online</i>`;
   $('mpList').innerHTML = arr.length ? `<div class="lvrow lvth"><span>الموظف</span><span>الحالة</span><span>المكان</span><span>آخر تحديث</span></div>` + arr.map(l => {
     const e = empById(l.id), st = motion(l);
     return `<button class="lvrow" data-focus="${l.id}"><span class="who"><i class="av ${fresh(l) ? 'liveav' : ''}">${esc(initials(l.name))}</i><span><b>${esc(l.name)}</b><small>${esc((e && e.dept) || l.dept || '')}</small></span></span><span><em class="chip ${st.cls}">${st.txt}</em></span><span class="pl">${placeName(l)}</span><span class="muted">${ago(l.atMs)}</span></button>`;
@@ -2026,7 +2051,7 @@ function renderOwner() {
   <div class="card reveal" style="margin-bottom:16px;animation-delay:.06s"><h2>دوام اليوم <span class="muted small" style="font-family:var(--f-body)">${DAYS[fromKey(key).getDay()]} · فترة السماح ${ar(grace())} د</span></h2>${bandHTML(P)}</div>
   <div class="depts reveal" role="group" aria-label="الأقسام">
    <button data-dept="all" aria-pressed="${deptFilter === 'all'}">الكل <i>${ar(emps.filter(e => e.active).length)}</i></button>
-   ${DEPTS.map(d => `<button data-dept="${d}" aria-pressed="${deptFilter === d}">${d} <i>${ar(dCount(d))}</i></button>`).join('')}
+   ${deptList().map(d => `<button data-dept="${d}" aria-pressed="${deptFilter === d}">${d} <i>${ar(dCount(d))}</i></button>`).join('')}
   </div>
   <div class="grid two">
    <section class="card reveal" style="animation-delay:.1s">
@@ -2041,7 +2066,7 @@ function renderOwner() {
     ${isViewer ? '' : `<form class="form addform" id="addForm" novalidate>
      <div class="fl"><label for="nName">اسم الموظف</label><input id="nName" autocomplete="off" placeholder="أحمد محمد"></div>
      <div class="fl"><label for="nNum">اسم المستخدم (حروف وأرقام)</label><input id="nNum" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ahmed1 أو أحمد1"></div>
-     <div class="fl"><label for="nDept">القسم</label><select id="nDept"><option value="">اختر القسم</option>${DEPTS.map(d => `<option ${deptFilter === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+     <div class="fl"><label for="nDept">القسم</label><select id="nDept"><option value="">اختر القسم</option>${deptList().map(d => `<option ${deptFilter === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
      <div class="fl"><label for="nPass">كلمة سر مؤقتة</label><input id="nPass" autocomplete="new-password" placeholder="٦ أرقام على الأقل"></div>
      <button class="btn primary" type="submit" id="addBtn">${ic('userplus', 16)} إضافة موظف</button>
      <div class="err" id="addErr"></div>
@@ -2131,7 +2156,7 @@ function openSheet(id) {
     <button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
     <div class="shgrid">
      <div class="fl"><label for="shName">الاسم</label><input id="shName" value="${esc(emp.name)}" maxlength="60"></div>
-     <div class="fl"><label for="shDept">القسم</label><select id="shDept">${DEPTS.map(d => `<option ${emp.dept === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+     <div class="fl"><label for="shDept">القسم</label><select id="shDept">${(deptList().includes(emp.dept) || !emp.dept ? deptList() : [...deptList(), emp.dept]).map(d => `<option ${emp.dept === d ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
      ${lv && lv.lat != null ? `<div class="fl"><label>الموقع المباشر</label><button class="btn ghost" id="shLive" type="button">${ic('map', 14)} ${fresh(lv) ? 'مباشر الآن' : 'آخر مكان'} · ${ago(lv.atMs)}</button></div>` : ''}
     </div>
     <div class="card geobox" style="padding:14px;margin:12px 0">
@@ -2158,7 +2183,8 @@ function openSheet(id) {
       <div class="fl"><label for="cLSite">صورة الموقع مع اللايف</label><select id="cLSite">${[['auto', 'حسب القسم'], ['on', 'مطلوبة'], ['off', 'مش مطلوبة']].map(([v, l]) => `<option value="${v}" ${(emp.liveSite || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="fl"><label for="cSchM">الدوام</label><select id="cSchM"><option value="global" ${!(emp.sched && emp.sched.mode === 'custom') ? 'selected' : ''}>الدوام العام للشركة</option><option value="custom" ${emp.sched && emp.sched.mode === 'custom' ? 'selected' : ''}>دوام خاص بيه</option></select></div>
      </div>
-     <p class="muted small" style="margin:2px 0 0">«حسب القسم»: صورة الموقع مطلوبة لقسم الإشراف بس.</p>
+     <p class="muted small" style="margin:2px 0 0">«حسب القسم»: بيمشي على إعدادات قسم ${esc(emp.dept || '')} (الإعدادات ← الأقسام): ${deptRule(emp.dept).punch ? 'صورة مع الحضور' : 'من غير صورة مع الحضور'} · ${deptRule(emp.dept).live ? 'صورة مع اللايف' : 'من غير صورة مع اللايف'}.</p>
+     <div class="schsum" id="cSchSum">${schedSummary(emp)}</div>
      <div id="cSchBox" ${emp.sched && emp.sched.mode === 'custom' ? '' : 'hidden'}>
       <div class="row-btns" style="margin:10px 0 8px"><button class="btn ghost" type="button" id="cSchCopy">${ic('restart', 14)} انسخ الدوام العام</button><button class="btn ghost" type="button" id="cSchOne">${ic('coffee', 14)} إلغاء البريك (دوام واحد)</button></div>
       <div class="sched" id="cSched">${DAY_ORDER.map(d => schedRowHTML(d, dayCfg(d, emp))).join('')}</div>
@@ -2197,7 +2223,8 @@ function openSheet(id) {
   const sl = $('shLive'); if (sl) sl.onclick = () => { closeSheet(); renderMap(); setTimeout(() => { const l = lives[emp.id]; if (ownMap && l) ownMap.setView([l.lat, l.lng], 17); }, 900); };
   $('shActive').onclick = async () => { try { await updateDoc(doc(db, 'employees', emp.id), { active: !emp.active }); closeSheet(); toast('ok', emp.active ? 'تم إيقاف حساب ' + emp.name : 'تم تفعيل حساب ' + emp.name, '', 'الإدارة'); } catch (e) { $('shErr').textContent = 'تعذّر الحفظ'; } };
   schedBind($('cSched'));
-  $('cSchM').onchange = e => { $('cSchBox').hidden = e.target.value !== 'custom'; };
+  $('cSchM').onchange = e => { $('cSchBox').hidden = e.target.value !== 'custom'; $('cSchSum').hidden = e.target.value === 'custom'; };
+  $('cSchSum').hidden = $('cSchM').value === 'custom';
   $('cSchCopy').onclick = () => { $('cSched').innerHTML = DAY_ORDER.map(d => schedRowHTML(d, dayCfg(d, null))).join(''); };
   $('cSchOne').onclick = () => {
     const { out } = readSched($('cSched'));
@@ -2276,6 +2303,11 @@ function schedRowHTML(d, c) {
        <div class="tp" data-two ${two ? '' : 'hidden'}><label>الفترة الثانية</label><div><input type="time" data-k="s2" value="${two ? hhmm(c.s2) : '16:00'}"><span>إلى</span><input type="time" data-k="e2" value="${two ? hhmm(c.e2) : '20:00'}"></div></div>
       </div></div>`;
 }
+// ملخص الدوام: كل يوم ومواعيده
+function schedSummary(emp) {
+  const L = DAY_ORDER.map(d => { const P = planOf(d, emp); return [DAYS[d], P.off ? 'إجازة' : P.shifts.map(([a, b]) => tm(a) + ' – ' + tm(b)).join(' · بريك · ')]; });
+  return `<b>${emp && emp.sched && emp.sched.mode === 'custom' ? 'دوامه الخاص' : 'الدوام العام للشركة'} (بيتعدّل من ${emp && emp.sched && emp.sched.mode === 'custom' ? 'هنا' : 'الإعدادات ← مواعيد العمل'})</b>` + L.map(([d, t]) => `<div><span>${d}</span><span>${t}</span></div>`).join('');
+}
 function readSched(root) {
   const out = {}; let bad = '';
     root.querySelectorAll('.sday').forEach(el => {
@@ -2336,6 +2368,13 @@ function renderSet() {
    <p class="muted small" style="margin:0 0 10px">نزّل نسخة من كل البيانات على جوالك أو جهازك. نزّل نسخة دايماً قبل أي «بدء من جديد».</p>
    <div class="row-btns"><button class="btn primary" id="bkJson" type="button">${ic('download', 16)} نسخة احتياطية كاملة</button><button class="btn ghost" id="bkCsv" type="button">${ic('file', 16)} كشف الحضور (Excel)</button></div>
   </section>
+  <section class="card reveal" style="margin-top:16px">
+   <h2>${ic('users', 18)} الأقسام</h2>
+   <p class="muted small" style="margin:0 0 10px">ضيف أو غيّر اسم أو امسح قسم، وحدد لكل قسم: صورة الموقع مع الحضور، وصورة الموقع مع اللايف، والتسجيل من أي مكان. أي موظف ممكن يكون له إعداد خاص بيه من صفحته.</p>
+   <div id="deptList"></div>
+   <form class="form inl" id="deptAdd" novalidate style="margin-top:10px"><div class="fl" style="flex:1"><label for="dNew">قسم جديد</label><input id="dNew" maxlength="30" placeholder="مثلاً: مهندس موقع"></div><button class="btn primary" type="submit">${ic('plus', 16)} إضافة</button></form>
+   <div class="err" id="dErr"></div>
+  </section>
   ${notifCardHTML()}
   ${exportCardHTML()}
   <section class="card reveal dangerzone" style="margin-top:16px;animation-delay:.075s">
@@ -2372,7 +2411,7 @@ function renderSet() {
   $('setBack').onclick = () => openTab('vOwn');
   $('phForm').onsubmit = async e => { e.preventDefault(); const ph = toEn($('phIn').value.trim()).replace(/[^\d+]/g, ''); try { await setDoc(doc(db, 'settings', 'main'), { phone: ph }, { merge: true }); toast('ok', ph ? 'تم حفظ رقم المدير' : 'تم مسح رقم المدير', ph, 'الإعدادات'); } catch (x) { toast('bad', 'تعذّر الحفظ', errWhy(x), 'الإعدادات'); } };
   $('bkJson').onclick = () => runBackup(true);
-  $('bkCsv').onclick = () => exportCsv(); bindExport(); bindNotifCard();
+  $('bkCsv').onclick = () => exportCsv(); bindExport(); bindNotifCard(); bindDepts();
   $('rsOpen').onclick = openReset;
   // grace
   const gEx = () => { const P = planOf(6).off ? planOf(0) : planOf(6), nv = id => parseInt(toEn($(id).value), 10) || 0; if (P.off) return; $('gEx').innerHTML = `مثال: الدوام ${tm(P.start)} ← <span class="tv tv-g">لحد ${tm(P.start + nv('gMin'))}</span> <span class="tv tv-y">لحد ${tm(P.start + nv('gRed'))}</span> <span class="tv tv-r">بعد كده</span>` + (P.two ? `<br>العودة ${tm(P.b2)} ← <span class="tv tv-g">لحد ${tm(P.b2 + nv('gBr'))}</span> <span class="tv tv-y">لحد ${tm(P.b2 + nv('gBrR'))}</span> <span class="tv tv-r">بعد كده</span>` : ''); };
@@ -2518,6 +2557,49 @@ function renderUi() {
   };
 }
 
+/* ----- إدارة الأقسام ----- */
+function paintDepts() {
+  const el = $('deptList'); if (!el) return;
+  el.innerHTML = deptList().map((d, i) => { const r = deptRule(d), n = emps.filter(e => e.dept === d).length; return `<div class="drow" data-i="${i}">
+    <div class="dh"><input class="dname" data-old="${esc(d)}" value="${esc(d)}" maxlength="30" aria-label="اسم القسم"><span class="muted small">${ar(n)} موظف</span><button class="navb" type="button" data-ddel="${esc(d)}" aria-label="مسح القسم">${ic('trash', 15)}</button></div>
+    <div class="dt">${[['punch', 'camera', 'صورة مع الحضور'], ['live', 'live', 'صورة مع اللايف'], ['any', 'pin', 'من أي مكان']].map(([k, icn, l]) => `<label class="dchip ${r[k] ? 'on' : ''}"><input type="checkbox" data-drk="${k}" data-dn="${esc(d)}" ${r[k] ? 'checked' : ''}>${ic(icn, 14)} ${l}</label>`).join('')}</div></div>`; }).join('');
+}
+async function saveDepts(list, rules, msg) {
+  try { await setDoc(doc(db, 'settings', 'main'), { depts: list, deptRules: rules }, { merge: true }); if (msg) toast('ok', msg, '', 'الأقسام'); $('dErr').textContent = ''; }
+  catch (x) { $('dErr').textContent = errWhy(x); }
+}
+const allRules = () => Object.fromEntries(deptList().map(d => [d, deptRule(d)]));
+function bindDepts() {
+  if (!$('deptList')) return; paintDepts();
+  $('deptList').onchange = async e => {
+    const c = e.target.closest('[data-drk]');
+    if (c) { const R = allRules(); R[c.dataset.dn] = { ...R[c.dataset.dn], [c.dataset.drk]: c.checked }; const ch = c.closest('.dchip'); if (ch) ch.classList.toggle('on', c.checked); return saveDepts(deptList(), R, 'تم حفظ إعدادات قسم ' + c.dataset.dn); }
+    const nm = e.target.closest('.dname');
+    if (nm) {
+      const old = nm.dataset.old, nu = nm.value.trim();
+      if (!nu || nu === old) { nm.value = old; return; }
+      if (deptList().includes(nu)) { $('dErr').textContent = 'فيه قسم بنفس الاسم'; nm.value = old; return; }
+      const list = deptList().map(d => d === old ? nu : d), R = allRules(); R[nu] = R[old]; delete R[old];
+      try {
+        const b = writeBatch(db); emps.filter(x => x.dept === old).forEach(x => b.update(doc(db, 'employees', x.id), { dept: nu })); await b.commit();
+        await saveDepts(list, R, 'القسم بقى اسمه ' + nu);
+      } catch (x) { $('dErr').textContent = errWhy(x); }
+    }
+  };
+  $('deptList').onclick = async e => {
+    const b = e.target.closest('[data-ddel]'); if (!b) return; const d = b.dataset.ddel, n = emps.filter(x => x.dept === d).length;
+    if (n) { $('dErr').textContent = `فيه ${ar(n)} موظف في قسم ${d}. انقلهم لقسم تاني الأول من صفحة كل موظف.`; return; }
+    if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.classList.add('danger'); toast('warn', 'اضغط تاني لمسح قسم ' + d, '', 'الأقسام'); setTimeout(() => { b.dataset.sure = ''; b.classList.remove('danger'); }, 3500); return; }
+    const R = allRules(); delete R[d]; saveDepts(deptList().filter(x => x !== d), R, 'اتمسح قسم ' + d);
+  };
+  $('deptAdd').onsubmit = e => {
+    e.preventDefault(); const nu = $('dNew').value.trim(); if (nu.length < 2) { $('dErr').textContent = 'اكتب اسم القسم'; return; }
+    if (deptList().includes(nu)) { $('dErr').textContent = 'القسم موجود بالفعل'; return; }
+    const R = allRules(); R[nu] = { punch: false, live: false, any: false }; $('dNew').value = '';
+    saveDepts([...deptList(), nu], R, 'اتضاف قسم ' + nu);
+  };
+}
+
 /* ----- النسخ الاحتياطي والبدء من جديد ----- */
 const plain = v => v && typeof v.toMillis === 'function' ? new Date(v.toMillis()).toISOString() : Array.isArray(v) ? v.map(plain) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)])) : v;
 function saveBlob(blob, name) { const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
@@ -2642,7 +2724,7 @@ onAuthStateChanged(auth, u => {
 function startSession(u) {
   setTimeout(() => { paintBell(); paintPray(); nativeSchedule(); }, 0);
   if (isViewer) $('userChip').textContent = viewerName + ' · متابعة';
-  unsubs.push(onSnapshot(doc(db, 'settings', 'main'), s => { settings = s.exists() ? s.data() : {}; if (!(view === 'vUi' && uiDirty)) applyUI(settings.ui); refresh(); }, () => { }));
+  unsubs.push(onSnapshot(doc(db, 'settings', 'main'), s => { settings = s.exists() ? s.data() : {}; if (!(view === 'vUi' && uiDirty)) applyUI(settings.ui); if (view === 'vSet' && !(document.activeElement && document.activeElement.classList.contains('dname'))) paintDepts(); refresh(); }, () => { }));
   unsubs.push(onSnapshot(query(collection(db, 'chat'), orderBy('at', 'desc'), limit(300)), onChat, () => { }));
   const yearStart = idxOfKey(today0().getFullYear() + '-01-01');
   unsubs.push(onSnapshot(doc(db, 'reads', u.uid), onReads, () => { }));
