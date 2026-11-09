@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=34">
+<link rel="manifest" href="manifest.json?v=36">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -890,6 +890,31 @@ button.wrow:active{background:var(--surface2)}
 .card > .esearch{max-width:none;margin:10px 0 6px}
 .qempty{text-align:center;margin:14px 0}
 @media (max-width:600px){.esearch{max-width:none;min-width:100%}}
+
+/* v36: غرف الشات ومدير القسم */
+.chatseg{margin:0 0 8px}
+.chatseg .segn,.dchips .segn,.dmt .segn{display:inline-flex;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-style:normal;align-items:center;justify-content:center;margin-inline-start:4px}
+.dchips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.dchips button{flex:none;padding:6px 12px;border-radius:16px;border:1px solid var(--line);background:var(--surface2);font:inherit;font-size:13px;color:var(--fg)}
+.dchips button.on{background:var(--gold);border-color:var(--gold);color:#fff}
+.roomnote{display:flex;align-items:center;gap:6px;margin:0 0 8px}
+.dmhead{display:flex;align-items:center;gap:10px;padding:4px 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.dmhead span:last-child{display:flex;flex-direction:column}
+.dmhead small{color:var(--muted);font-size:11px;display:flex;align-items:center;gap:4px}
+.wav{width:36px;height:36px;border-radius:50%;overflow:hidden;flex:none;display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);font-weight:700;font-size:13px;color:var(--gold)}
+.wav img{width:100%;height:100%;object-fit:cover}
+.dmlist{flex:1;overflow-y:auto;min-height:0}
+.dmlist .esearch{max-width:none;margin:0 0 10px}
+.dmcap{display:block;color:var(--muted);margin:10px 2px 4px;font-weight:600}
+.dmrow{display:flex;align-items:center;gap:10px;width:100%;padding:10px 6px;border:0;border-bottom:1px solid var(--line);background:none;font:inherit;color:inherit;text-align:right;cursor:pointer}
+.dmrow:active{background:var(--surface2)}
+.dmi{flex:1;min-width:0;display:flex;flex-direction:column}
+.dmi small{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dmt{display:flex;flex-direction:column;align-items:flex-end;gap:4px;color:var(--muted)}
+.seen{font-style:normal;font-size:11px;color:var(--muted);letter-spacing:-2px}
+.seen.ok{color:#2f8fd8}
+.mgrsel{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:12px;font-size:13px}
+.mgrsel select{border:0;background:none;font:inherit;padding:0 4px;color:var(--fg)}
 </style>
 </head>
 <body>
@@ -959,6 +984,6 @@ button.wrow:active{background:var(--surface2)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=34"></script>
+<script type="module" src="app.js?v=36"></script>
 </body>
 </html>

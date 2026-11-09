@@ -1,6 +1,6 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=34';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=36';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 /* ========== Firebase ========== */
@@ -220,10 +220,10 @@ function planOf(dow, emp) {
   if (!c || !c.on || c.s1 == null || c.e1 == null) return { off: true, shifts: [], fields: [], W: {}, start: null, end: null };
   if (c.s2 != null && c.e2 != null && c.s2 > c.e1) {
     const o1end = (c.s2 - c.e1) <= 60 ? c.s2 - 1 : c.e1 + 60;
-    const W = { in: [c.s1 - 30, c.e1 - 1], out1: [c.e1, o1end], in2: [Math.max(o1end + 1, c.s2 - 60), c.e2 - 1], out: [c.e2, 1439] };
+    const W = { in: [c.s1 - 30, c.e1 - 1], out1: [c.e1, o1end], in2: [Math.max(o1end + 1, c.s2 - 60), c.e2 - 1], out: [Math.max(o1end + 1, c.s2 - 60), 1439] };
     return { off: false, two: true, shifts: [[c.s1, c.e1], [c.s2, c.e2]], fields: ALL, W, start: c.s1, end: c.e2, b1: c.e1, b2: c.s2 };
   }
-  return { off: false, two: false, shifts: [[c.s1, c.e1]], fields: ['in', 'out'], W: { in: [c.s1 - 30, c.e1 - 1], out: [c.e1, 1439] }, start: c.s1, end: c.e1 };
+  return { off: false, two: false, shifts: [[c.s1, c.e1]], fields: ['in', 'out'], W: { in: [c.s1 - 30, c.e1 - 1], out: [c.s1 - 30, 1439] }, start: c.s1, end: c.e1 };
 }
 const planKey = (k, emp) => planOf(fromKey(k).getDay(), emp === undefined ? defEmp() : emp);
 const todayPlan = emp => planKey(todayKey(), emp);
@@ -239,12 +239,13 @@ function docToRec(d) {
   if (d.late_note && d.late_note.text) r.note = d.late_note.text;
   r.lph = [d.late_note, d.late_note2].filter(x => x && x.thumb).map((x, i) => ({ thumb: x.thumb, media: x.media || '', text: x.text || '' }));
   if (d.late_note2 && d.late_note2.text) r.note2 = d.late_note2.text;
+  if (d.out_note && d.out_note.text) r.outNote = d.out_note.text;
   return (r.in == null && r.in2 == null && r.out == null) ? null : r;
 }
 function empFromDoc(s) {
   const d = s.data();
   const created = d.createdAt && d.createdAt.toMillis ? keyOfIdx(dayIdx(d.createdAt.toMillis())) : todayKey();
-  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', watch: !!d.watch, profileDone: !!d.profileDone, leaves: Array.isArray(d.leaves) ? d.leaves : [], methods: d.methods || 'both', punchSite: d.punchSite || 'auto', liveSite: d.liveSite || 'auto', sched: d.sched || null, emergency: d.emergency || '', about: d.about || '' };
+  return { id: s.id, name: d.name || '', num: d.num || '', dept: d.dept || '', active: d.active !== false, cred: d.cred || null, mustChange: !!d.mustChange, start: d.start || created, geo: d.geo || { mode: 'sites' }, photo: d.photo || '', photoSm: d.photoSm || '', phone: d.phone || '', email: d.email || '', jobTitle: d.jobTitle || '', city: d.city || '', birth: d.birth || '', watch: !!d.watch, mgr: d.mgr || '', profileDone: !!d.profileDone, leaves: Array.isArray(d.leaves) ? d.leaves : [], methods: d.methods || 'both', punchSite: d.punchSite || 'auto', liveSite: d.liveSite || 'auto', sched: d.sched || null, emergency: d.emergency || '', about: d.about || '' };
 }
 
 /* ========== day logic ========== */
@@ -292,13 +293,15 @@ function allowed(r, n, P) {
   n = Math.floor(n);
   if (P.off) return { f: null, msg: 'اليوم إجازة', sub: 'لا يوجد دوام اليوم' };
   const nx = nextTxt(r, n, P);
+  let doneF = null;
   for (const f of P.fields) {
     if (n < P.W[f][0] || n > P.W[f][1]) continue;
-    if (r && r[f] != null) return { f: null, msg: 'تم ' + FL[f] + ' الساعة ' + tm(r[f]), sub: 'لا يمكن تسجيل ' + FL[f] + ' مرة أخرى' + (nx ? ' · ' + nx : '') };
+    if (r && r[f] != null) { doneF = doneF || f; continue; }
     if (f === 'out1' && !(r && r.in != null)) return { f: null, msg: 'لا يوجد حضور مسجّل اليوم', sub: 'خروج البريك يحتاج حضوراً مسجّلاً' + (nx ? ' · ' + nx : '') };
     if (f === 'out' && !(r && (r.in != null || r.in2 != null))) return { f: null, msg: 'لا يوجد حضور مسجّل اليوم', sub: 'لا يمكن الانصراف بدون حضور' };
     return { f };
   }
+  if (doneF) return { f: null, msg: 'تم ' + FL[doneF] + ' الساعة ' + tm(r[doneF]), sub: 'لا يمكن تسجيل ' + FL[doneF] + ' مرة أخرى' + (nx ? ' · ' + nx : '') };
   return { f: null, msg: 'التسجيل مغلق الآن', sub: nx || 'انتهت أوقات التسجيل لليوم' };
 }
 function stats(emp, from, to) {
@@ -427,7 +430,7 @@ function goTo(target) {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.go) goTo(e.data.go); });
 let pendingGo = (location.hash || '').replace('#go=', '').replace('#', '') || null;
-function setBadge() { try { const n = unread(); if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch (e) { } }
+function setBadge() { try { const n = totalUnread(); if (navigator.setAppBadge) { n ? navigator.setAppBadge(n) : navigator.clearAppBadge(); } } catch (e) { } }
 function askNotify() { try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(() => refresh()); } catch (e) { } }
 
 /* ========== clock ========== */
@@ -436,7 +439,7 @@ function setDates() { const d = new Date(); $('gDate').textContent = gNow.format
 
 /* ========== views + tab bar ========== */
 const VIEWS = ['vLogin', 'vPass', 'vMsg', 'vEmp', 'vOwn', 'vLive', 'vMap', 'vChat', 'vSet', 'vUi', 'vMe', 'vSetup', 'vWatch'];
-let isWatch = false, wEmps = [], watchUnsubs = [], wDay = null;
+let isWatch = false, wEmps = [], watchUnsubs = [], wDay = null, watchDept = null, watchKey = '';
 const TABS_EMP = [['vEmp', 'finger', 'البصمة'], ['vLive', 'live', 'موقعي المباشر'], ['vChat', 'chat', 'الشات'], ['vMe', 'user', 'حسابي']];
 const TABS_VIEW = [['vOwn', 'home', 'الحضور'], ['vMap', 'map', 'لايف لوكيشن'], ['vChat', 'chat', 'الشات']];
 const TABS_OWN = [['vOwn', 'home', 'الرئيسية'], ['vMap', 'map', 'لايف لوكيشن'], ['vChat', 'chat', 'الشات'], ['vUi', 'brush', 'التخصيص'], ['vSet', 'gear', 'الإعدادات']];
@@ -463,8 +466,8 @@ function tabIntro() {
 const isWatchOnly = () => isWatch && !canSee();
 const curTab = () => (view === 'vMap' && isWatchOnly()) ? 'vWatch' : view;
 function paintTabs() {
-  const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : (isWatch ? [TABS_EMP[0], ['vWatch', 'eye', T('tab_vWatch')], ...TABS_EMP.slice(1)] : TABS_EMP), tb = $('tabbar');
-  const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
+  const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : (isWatch ? [TABS_EMP[0], ['vWatch', 'eye', watchDept ? 'قسمي' : T('tab_vWatch')], ...TABS_EMP.slice(1)] : TABS_EMP), tb = $('tabbar');
+  const extra = v => (v === 'vChat' && totalUnread() ? `<i class="badge">${ar(Math.min(totalUnread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
   if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite') ? T('tab_vLiveSup') : tabs[i][2]) && b.dataset.ic === ((tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite')) ? ((UI.icons && UI.icons.vLiveSup) || 'map') : tabs[i][1]))) {
@@ -843,10 +846,33 @@ function updateEmpLive(full) {
 
 const methodOf = e => (e && e.methods) || 'both';
 const coreIcon = () => `<span class="face">${ic(methodOf(meEmp) === 'finger' ? 'finger' : 'check', 70, 1.2)}</span>`;
+let pendingOut = null;
+// سبب الانصراف: إجباري قبل تسجيل الانصراف
+function outReasonSheet() {
+  return new Promise(resolve => {
+    const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null; let done = false;
+    const P = todayPlan(), early = !P.off && nowMin() < P.end;
+    inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--gold);color:#fff">${ic('logout', 22)}</div><b>سبب الانصراف <span class="muted small">${early ? 'قبل نهاية الدوام بـ ' + dur(P.end - nowMin()) : 'آخر اليوم'}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+      <p class="muted small" style="margin:0 0 10px">لازم تكتب سبب الانصراف عشان يتسجّل، وهيوصل للمدير.</p>
+      <div class="qrs">${(early ? ['ظرف طارئ', 'مشوار شغل', 'استئذان من المدير', 'تعبان'] : ['خلّصت شغل اليوم', 'نهاية الدوام']).map(x => `<button type="button" class="qr">${x}</button>`).join('')}</div>
+      <div class="fl" style="margin-top:10px"><label for="outTx">سبب الانصراف</label><textarea id="outTx" rows="3" maxlength="300" placeholder="اكتب السبب هنا"></textarea></div>
+      <button class="btn primary" id="outGo" type="button" style="width:100%" disabled>${ic('check', 16)} تسجيل الانصراف</button>
+      <div class="err" id="outErr"></div>`;
+    sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+    const fin = v => { if (done) return; done = true; closeSheet(); resolve(v); };
+    $('shClose').onclick = () => fin(null); sc.onclick = () => fin(null);
+    const tx = $('outTx'), chk = () => { $('outGo').disabled = tx.value.trim().length < 3; };
+    inner.querySelectorAll('.qr').forEach(b => b.onclick = () => { tx.value = b.textContent; chk(); tx.focus(); });
+    tx.oninput = chk; setTimeout(() => tx.focus(), 300);
+    $('outGo').onclick = () => fin(tx.value.trim());
+  });
+}
+async function askOut(A) { if (A.f !== 'out') return true; pendingOut = await outReasonSheet(); if (!pendingOut) { runFail('لازم تكتب سبب الانصراف عشان يتسجّل'); return false; } return true; }
 function bindScan() {
   const bTap = $('bTap'), bFp = $('bFp'), cam = $('cam');
   const tap = async () => {
     if (busy) return; const A = allowed(myRec(), nowMin(), todayPlan()); if (!A.f) { runFail(A.msg); return; }
+    if (!(await askOut(A))) return;
     if (needSite(A.f)) { pendingSite = await siteCapture(FL[A.f]); if (!pendingSite) { runFail('لازم صورة الموقع واسم الحي عشان يتسجّل ' + FL[A.f]); return; } }
     vibrate(25); doPunch('tap', null, 'جارٍ التسجيل…');
   };
@@ -864,12 +890,14 @@ function bindScan() {
     } catch (e) { runFail('تعذّر قراءة الصورة، حاول مرة أخرى'); return; }
     $('core').innerHTML = `<img src="${thumb}" alt="">`;
     const A = allowed(myRec(), nowMin(), todayPlan());
+    if (A.f && !(await askOut(A))) { $('core').innerHTML = `${coreIcon()}`; return; }
     if (A.f && needSite(A.f)) { pendingSite = await siteCapture(FL[A.f]); if (!pendingSite) { runFail('لازم صورة الموقع واسم الحي عشان يتسجّل ' + FL[A.f]); $('core').innerHTML = `${coreIcon()}`; return; } }
     doPunch('face', thumb, 'جارٍ التحقق من الوجه…');
   };
   if (bFp) bFp.onclick = async () => {
     if (busy || bFp.disabled) return;
     const A = allowed(myRec(), nowMin(), todayPlan()); if (!A.f) { runFail(A.msg); return; }
+    if (!(await askOut(A))) return;
     busy = true; $('scan').classList.add('busy'); $('hint').textContent = 'ضع إصبعك على حساس الجوال أو استخدم Face ID…';
     const ok = await bioVerify(); busy = false;
     if (ok === true) {
@@ -1030,16 +1058,27 @@ function checkPrayer() {
 }
 
 /* ========== المراقب: موظف يشوف حضور وغياب الكل ويبصم عادي ========== */
-function setWatch(on) {
-  if (on && !isWatch) {
-    isWatch = true;
-    const ys = idxOfKey(today0().getFullYear() + '-01-01');
-    watchUnsubs.push(onSnapshot(collection(db, 'employees'), sn => { wEmps = sn.docs.map(empFromDoc); if (view === 'vWatch') paintWatch(); }, () => { }));
-    watchUnsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', ys)), onDays, () => { }));
-    watchUnsubs.push(onSnapshot(collection(db, 'live'), sn => { onLive(sn); if (view === 'vWatch') paintWatch(); }, () => { }));
+// المراقب (dept = null) يشوف الشركة كلها، ومدير القسم (dept = اسم القسم) يشوف قسمه بس
+function setWatch(on, dept = null) {
+  const key = on ? (dept || '*') : '';
+  if (key === watchKey) return;
+  if (watchKey) { watchUnsubs.forEach(u => { try { u(); } catch (e) { } }); watchUnsubs = []; wEmps = []; isWatch = false; watchDept = null; }
+  watchKey = key;
+  if (on) {
+    isWatch = true; watchDept = dept;
+    const live = sn => { onLive(sn); if (view === 'vWatch') paintWatch(); };
+    if (!dept) {
+      const ys = idxOfKey(today0().getFullYear() + '-01-01');
+      watchUnsubs.push(onSnapshot(collection(db, 'employees'), sn => { wEmps = sn.docs.map(empFromDoc); if (view === 'vWatch') paintWatch(); }, () => { }));
+      watchUnsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', ys)), onDays, () => { }));
+      watchUnsubs.push(onSnapshot(collection(db, 'live'), live, () => { }));
+    } else {
+      watchUnsubs.push(onSnapshot(query(collection(db, 'employees'), where('dept', '==', dept)), sn => { wEmps = sn.docs.map(empFromDoc); if (view === 'vWatch') paintWatch(); }, () => { }));
+      watchUnsubs.push(onSnapshot(query(collection(db, 'days'), where('dept', '==', dept)), onDays, () => { }));
+      watchUnsubs.push(onSnapshot(query(collection(db, 'live'), where('dept', '==', dept)), live, () => { }));
+    }
     if (me && !$('tabbar').hidden) paintTabs();
-  } else if (!on && isWatch) {
-    isWatch = false; watchUnsubs.forEach(u => { try { u(); } catch (e) { } }); watchUnsubs = []; wEmps = [];
+  } else {
     if (view === 'vWatch') renderEmp(); else if (me && !$('tabbar').hidden) paintTabs();
   }
 }
@@ -1071,7 +1110,7 @@ const WF = {
 const WFL = { all: 'بدون فلتر', present: 'حاضر', absent: 'غايب', late: 'متأخر', early: 'حضر بدري', leave: 'في إجازة', live: 'لايف لوكيشن' };
 function renderWatch() {
   show('vWatch'); const v = $('vWatch'), k = wDay || todayKey();
-  v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} المتابعة</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
+  v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} ${watchDept ? 'قسم ' + esc(watchDept) : 'المتابعة'}</b><span>مشاهدة فقط · ${watchDept ? 'إنت مدير القسم ده' : esc(COMPANY)}</span></div>
    <div class="seg wseg reveal"><button type="button" data-ws="att" class="${wSeg === 'att' ? 'on' : ''}">${ic('users', 16)} الحضور</button><button type="button" data-ws="live">${ic('live', 16)} لايف لوكيشن <i class="onl" id="wOnl"></i></button><button type="button" data-ws="rep" class="${wSeg === 'rep' ? 'on' : ''}">${ic('chart', 16)} التقارير</button></div>
    ${wSeg === 'att' ? `<section class="card reveal" style="margin-top:12px"><div class="fl"><label for="wDayIn">اليوم</label><input type="date" id="wDayIn" value="${k}" max="${todayKey()}"></div>
     <div class="okpis" id="wK"></div><div id="wBar"></div>${searchBox('wQ')}<div class="wlist" id="wList"></div></section>` : exportCardHTML()}`;
@@ -1097,7 +1136,7 @@ function paintWatch() {
   const order = { leave: 7, notyet: 1, absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
   el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
     const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '', lv = online(lives[e.id]);
-    return `<button type="button" class="wrow" data-wemp="${e.id}" data-q="${esc(empHay(e))}"><div class="av ${lv ? 'liveav' : ''}">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span>${lv ? ' <i class="onl"><b></b>لايف</i>' : ''}</b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}<small class="sexp">${esc(shiftExplain(e, k))}</small></div></button>`;
+    return `<button type="button" class="wrow" data-wemp="${e.id}" data-q="${esc(empHay(e))}"><div class="av ${lv ? 'liveav' : ''}">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span>${lv ? ' <i class="onl"><b></b>لايف</i>' : ''}</b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}${r && r.outNote ? `<small class="lnote">سبب الانصراف: ${esc(r.outNote)}</small>` : ''}<small class="sexp">${esc(shiftExplain(e, k))}</small></div></button>`;
   }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين هنا</p>';
   applySearch(el, 'wQ');
 }
@@ -1152,11 +1191,11 @@ async function loadXLSX() {
 async function buildReport(fromK, toK) {
   const a = idxOfKey(fromK), b = Math.min(idxOfKey(toK), todayIdx());
   if (b < a) return null;
-  const snap = await getDocs(query(collection(db, 'days'), where('day', '>=', a), where('day', '<=', b)));
+  const snap = await getDocs(isWatchOnly() && watchDept ? query(collection(db, 'days'), where('dept', '==', watchDept)) : query(collection(db, 'days'), where('day', '>=', a), where('day', '<=', b)));
   const R = {}; snap.docs.forEach(d => { const x = d.data(); if (x.day < a || x.day > b) return; (R[x.uid] = R[x.uid] || {})[keyOfIdx(x.day)] = docToRec(x); });
   const hm = m => m == null ? '' : tm(m), hrs = m => Math.round(m / 6) / 10;
   const sum = [['الموظف', 'القسم', 'أيام العمل', 'حضور', 'غياب', 'في الموعد', 'بدري', 'متأخر', 'تأخير كبير', 'مجموع التأخير (دقيقة)', 'ساعات العمل', 'أيام الإجازة', 'نسبة الحضور']];
-  const det = [['التاريخ', 'اليوم', 'الموظف', 'القسم', 'الحالة', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'التأخير (دقيقة)', 'ساعات العمل', 'سبب التأخير', 'حي الإشراف']];
+  const det = [['التاريخ', 'اليوم', 'الموظف', 'القسم', 'الحالة', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'التأخير (دقيقة)', 'ساعات العمل', 'سبب التأخير', 'سبب الانصراف', 'حي الإشراف']];
   const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' });
   allEmps().filter(e => e.active || R[e.id]).forEach(e => {
     let wd = 0, pr = 0, ab = 0, ok = 0, ea = 0, la = 0, vl = 0, lm = 0, mins = 0, lvn = 0;
@@ -1164,8 +1203,8 @@ async function buildReport(fromK, toK) {
       const k = keyOfIdx(i); if (k < e.start) continue;
       const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
       if (!P.off) wd++;
-      const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '']); } continue; }
-      if (!has) { if (P.off || (isToday(k) && nowMin() <= absT(P))) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
+      const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '', '']); } continue; }
+      if (!has) { if (P.off || (isToday(k) && nowMin() <= absT(P))) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '', '']); continue; }
       pr++; const w = worked(r, k, e); mins += w;
       let st = 'حضر في إجازة', late = 0;
       if (!P.off) {
@@ -1174,7 +1213,7 @@ async function buildReport(fromK, toK) {
         if (r.in != null && r.in < P.start) { st = 'بدري'; ea++; } else if (lv === 'r') { st = 'تأخير كبير'; vl++; } else if (lv === 'y') { st = 'متأخر'; la++; } else { st = 'في الموعد'; ok++; }
         lm += late;
       }
-      det.push([k, dayName.format(fromKey(k)), e.name, e.dept, st, hm(r.in), hm(r.out1) + (r.m.out1 === 'auto' ? ' تلقائي' : ''), hm(r.in2), hm(r.out) + (r.m.out === 'auto' ? ' تلقائي' : ''), late || '', hrs(w), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
+      det.push([k, dayName.format(fromKey(k)), e.name, e.dept, st, hm(r.in), hm(r.out1) + (r.m.out1 === 'auto' ? ' تلقائي' : ''), hm(r.in2), hm(r.out) + (r.m.out === 'auto' ? ' تلقائي' : ''), late || '', hrs(w), [r.note, r.note2].filter(Boolean).join(' / '), r.outNote || '', [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
     }
     sum.push([e.name, e.dept, wd, pr, ab, ok, ea, la, vl, lm, hrs(mins), lvn, (wd - lvn) > 0 ? Math.round(Math.min(pr, wd - lvn) / (wd - lvn) * 100) + '%' : '']);
   });
@@ -1214,7 +1253,7 @@ async function exportXlsx(fromK, toK, label, fname) {
     const X = await loadXLSX(), rep = await buildReport(fromK, toK);
     if (!rep) { toast('warn', 'الفترة دي لسه ماجتش', '', 'التقارير'); return; }
     const { sum, det, b } = rep, per = 'الفترة: ' + (fromK === keyOfIdx(b) ? fromK : fromK + ' إلى ' + keyOfIdx(b)) + ' · اتطبع ' + todayKey() + ' ' + tm(nowMin());
-    const dw = [12, 10, 22, 14, 13, 10, 13, 10, 14, 12, 10, 26, 18];
+    const dw = [12, 10, 22, 14, 13, 10, 13, 10, 14, 12, 10, 26, 26, 18];
     const pres = [det[0], ...det.slice(1).filter(r => !['غائب'].includes(r[4]) && !String(r[4]).startsWith('إجازة'))];
     const abs = [det[0], ...det.slice(1).filter(r => r[4] === 'غائب' || String(r[4]).startsWith('إجازة'))];
     const sumS = styledSheet(X, 'ملخص الحضور والغياب · ' + COMPANY, per, sum, [24, 14, 10, 8, 8, 10, 8, 8, 11, 18, 11, 11, 11], null);
@@ -1256,6 +1295,7 @@ function todayCard(emp) {
 // شرح اليوم: سجّل في الفترتين ولا لأ
 function shiftExplain(e, k) {
   const P = planKey(k, e), r = getRec(e, k), lv = onLeave(e, k), isT = isToday(k), n = nowMin();
+  if (e.start && k < e.start && !r) return 'بيبدأ تسجيل حضوره من ' + (e.start === keyOfIdx(todayIdx() + 1) ? 'بكره' : dFmt.format(fromKey(e.start)));
   if (lv) return 'في إجازة ' + (LEAVE_T[lv.type] || '') + ' · العودة ' + dFmt.format(fromKey(lv.back));
   if (P.off) return 'يوم إجازة (مفيش دوام)';
   let a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= absT(P) ? 'متأخر · لسه ما وصلش (يتحسب غياب ' + tm(absT(P)) + ')' : 'غايب · ما سجّلش حضور ✗');
@@ -1647,7 +1687,8 @@ async function punch(method, thumb) {
     const near = list.map(s => ({ s, d: distM(geo, s) })).sort((a, b) => a.d - b.d)[0];
     return { ok: false, msg: 'أنت خارج موقع العمل · أقرب موقع ' + near.s.name + ' على بعد ' + ar(Math.round(near.d)) + ' م' };
   }
-  const k = FMAP[A.f]; const data = { [k]: serverTimestamp(), [k + '_m']: method };
+  const k = FMAP[A.f]; const data = { [k]: serverTimestamp(), [k + '_m']: method, dept: meEmp.dept || '' };
+  if (A.f === 'out') { const why = pendingOut; pendingOut = null; if (!why) return { ok: false, msg: 'لازم تكتب سبب الانصراف' }; data.out_note = { text: why, at: serverTimestamp() }; }
   if (thumb) data[k + '_ph'] = thumb; if (geo) data[k + '_geo'] = geo;
   let siteMid = null;
   if (st) { try { siteMid = await saveSiteMedia(st); } catch (e) { return { ok: false, msg: 'تعذّر رفع صورة الموقع، حاول مرة أخرى' }; } data[k + '_site'] = { district: st.district, note: st.note || '', media: siteMid, thumb: st.thumb }; }
@@ -2042,11 +2083,125 @@ function paintMap(fit) {
 function markerClick(id) { openLiveSheet(id); }
 
 /* ========== chat ========== */
+// غرف الشات: العام (chat)، شات القسم (dchat)، الخاص (dm: بين اتنين بس، ومحدش غيرهم يقدر يقراه)
+let chatRoom = 'pub', chatDept = null, chatPeer = null, dmQ = '';
+let dchat = [], dchatUnsubs = [], dchatKey = '', dmA = [], dmB = [], dmSubbed = false, people = [], roomReads = {}, rrSaved = {};
+const ownerP = () => ({ id: OWNER_UID, name: 'الإدارة', dept: 'المالك', photoSm: '', owner: true });
+const myName = () => isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name;
+const myDeptRooms = () => canSee() ? deptList() : [...new Set([meEmp && meEmp.dept, meEmp && meEmp.mgr].filter(Boolean))];
+const toMsg = (d, col) => { const x = d.data(); return { id: d.id, _col: col, ...x, atMs: x.at && x.at.toMillis ? x.at.toMillis() : Date.now() }; };
+const pairOf = (a, b) => [a, b].sort().join('_');
+const allDms = () => [...dmA, ...dmB].sort((a, b) => a.atMs - b.atMs);
+const roomLast = k => { let l = 0; try { l = +(localStorage.getItem('sh-rr-' + (me && me.uid) + '-' + k) || 0); } catch (e) { } return Math.max(l, +(roomReads[k] || 0)); };
+const deptUnread = d => { const lr = roomLast('dept_' + d); return dchat.filter(m => m.rd === d && m.atMs > lr && m.uid !== (me && me.uid)).length; };
+const dmUnread = p => { const lr = roomLast('dm_' + p); return dmB.filter(m => m.from === p && m.atMs > lr).length; };
+const allDeptUnread = () => myDeptRooms().reduce((a, d) => a + deptUnread(d), 0);
+const allDmUnread = () => [...new Set(dmB.map(m => m.from))].reduce((a, p) => a + dmUnread(p), 0);
+const totalUnread = () => unread() + allDeptUnread() + allDmUnread();
+const personOf = id => id === OWNER_UID ? ownerP() : people.find(p => p.id === id) || (() => { const m = allDms().filter(x => x.from === id).pop(); return { id, name: m ? m.name : 'مستخدم', dept: m ? m.dept : '', photoSm: m && m.ph || '' }; })();
+function curMsgs() { return chatRoom === 'dept' ? dchat.filter(m => m.rd === chatDept) : chatRoom === 'dm' ? (chatPeer ? allDms().filter(m => m.pair === pairOf(me.uid, chatPeer)) : []) : msgs; }
+function markRoomRead(k, list) {
+  if (!me) return; const t = Math.max(Date.now(), roomLast(k), ...list.map(m => m.atMs));
+  try { localStorage.setItem('sh-rr-' + me.uid + '-' + k, String(t)); } catch (e) { }
+  if (t - (rrSaved[k] || 0) > 3000) { rrSaved[k] = t; roomReads[k] = Math.max(+(roomReads[k] || 0), t); setDoc(doc(db, 'reads', me.uid), { [k]: t }, { merge: true }).catch(() => { rrSaved[k] = 0; }); }
+  setBadge(); if (!$('tabbar').hidden) paintTabs();
+}
+function markCurRead() {
+  if (view !== 'vChat' || document.hidden) return;
+  if (chatRoom === 'pub') markChatRead();
+  else if (chatRoom === 'dept' && chatDept) markRoomRead('dept_' + chatDept, curMsgs());
+  else if (chatRoom === 'dm' && chatPeer) {
+    markRoomRead('dm_' + chatPeer, curMsgs());
+    const un = dmB.filter(m => m.from === chatPeer && !m.seen); if (un.length) { const b = writeBatch(db); un.slice(0, 400).forEach(m => { m.seen = true; b.update(doc(db, 'dm', m.id), { seen: true, seenAt: serverTimestamp() }); }); b.commit().catch(() => { }); }
+  }
+}
+const msgTxt = m => (m.kind === 'img' ? '📷 صورة' + (m.text ? ' · ' : '') : m.kind === 'voice' ? '🎤 رسالة صوتية ' + fmtDur(m.dur || 0) : m.kind === 'file' ? '📎 ' + (m.fname || 'ملف') + (m.text ? ' · ' : '') : '') + String(m.text || '').slice(0, 140);
+function onRoomMsgs(added, kind) {
+  added.forEach(m => {
+    if (m.uid === me.uid) return;
+    const here = view === 'vChat' && !document.hidden && ((kind === 'dept' && chatRoom === 'dept' && chatDept === m.rd) || (kind === 'dm' && chatRoom === 'dm' && chatPeer === m.from));
+    const who = m.name + (kind === 'dept' ? ' · شات ' + m.rd : ' · خاص'), txt = msgTxt(m);
+    if (here) { vibrate(20); return; }
+    toast('chat', who, txt, kind === 'dm' ? 'رسالة خاصة' : 'شات القسم'); pushLog('chat', '💬 ' + who, txt, 'vChat');
+    if (notifPrefs().chat !== false) sysNotify('💬 ' + who, txt, 'chat', 'vChat');
+  });
+  if (view === 'vChat') { paintRoom(); markCurRead(); }
+  if (!$('tabbar').hidden) paintTabs(); setBadge();
+}
+// الاشتراك في شات القسم والخاص (بيتنادى بعد ما بيانات الحساب توصل)
+function subRooms() {
+  if (!me) return;
+  const rooms = myDeptRooms(), key = canSee() ? '*' : rooms.join('|');
+  if (key !== dchatKey) {
+    dchatUnsubs.forEach(u => { try { u(); } catch (e) { } }); dchatUnsubs = []; dchat = []; dchatKey = key;
+    const parts = {}, qs = canSee() ? [query(collection(db, 'dchat'), orderBy('at', 'desc'), limit(600))] : rooms.map(d => query(collection(db, 'dchat'), where('rd', '==', d)));
+    qs.forEach((q, i) => { let first = true; dchatUnsubs.push(onSnapshot(q, sn => {
+      const added = first ? [] : sn.docChanges().filter(c => c.type === 'added' && !c.doc.metadata.hasPendingWrites).map(c => toMsg(c.doc, 'dchat')); first = false;
+      parts[i] = sn.docs.map(d => toMsg(d, 'dchat')); dchat = Object.values(parts).flat().sort((a, b) => a.atMs - b.atMs); onRoomMsgs(added, 'dept');
+    }, () => { })); });
+  }
+  if (!dmSubbed) {
+    dmSubbed = true;
+    unsubs.push(onSnapshot(query(collection(db, 'dm'), where('from', '==', me.uid)), sn => { dmA = sn.docs.map(d => toMsg(d, 'dm')); onRoomMsgs([], 'dm'); }, () => { }));
+    let first = true;
+    unsubs.push(onSnapshot(query(collection(db, 'dm'), where('to', '==', me.uid)), sn => {
+      const added = first ? [] : sn.docChanges().filter(c => c.type === 'added').map(c => toMsg(c.doc, 'dm')); first = false;
+      dmB = sn.docs.map(d => toMsg(d, 'dm')); onRoomMsgs(added, 'dm');
+    }, () => { }));
+    unsubs.push(onSnapshot(collection(db, 'people'), sn => { people = sn.docs.map(d => ({ id: d.id, ...d.data() })); syncMyPeople(); if (view === 'vChat' && chatRoom === 'dm') paintRoom(); }, () => { }));
+  }
+}
+// دليل الأسماء للشات الخاص (الاسم والقسم والصورة الصغيرة بس، من غير باقي بيانات الموظف)
+function syncMyPeople() {
+  if (isOwner) {
+    const b = writeBatch(db); let n = 0;
+    emps.forEach(e => { const p = people.find(x => x.id === e.id), v = { name: e.name, dept: e.dept || '', photoSm: e.photoSm || '', active: e.active }; if (!p || p.name !== v.name || p.dept !== v.dept || (p.photoSm || '') !== v.photoSm || p.active !== v.active) { b.set(doc(db, 'people', e.id), v); n++; } });
+    people.forEach(p => { if (!emps.find(e => e.id === p.id)) { b.delete(doc(db, 'people', p.id)); n++; } });
+    if (n) b.commit().catch(() => { });
+  } else if (meEmp && !canSee()) {
+    const p = people.find(x => x.id === me.uid);
+    if (p && (p.name !== meEmp.name || (p.photoSm || '') !== (meEmp.photoSm || ''))) setDoc(doc(db, 'people', me.uid), { name: meEmp.name, photoSm: meEmp.photoSm || '' }, { merge: true }).catch(() => { });
+  }
+}
+function roomPayload() {
+  const b = { uid: me.uid, name: myName(), dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), ph: (!canSee() && meEmp.photoSm) || null, owner: isOwner, at: serverTimestamp() };
+  if (chatRoom === 'dept') return ['dchat', { ...b, rd: chatDept }];
+  if (chatRoom === 'dm') return ['dm', { ...b, from: me.uid, to: chatPeer, pair: pairOf(me.uid, chatPeer) }];
+  return ['chat', b];
+}
+function paintRoom() {
+  const seg = $('chatSeg'); if (!seg) return;
+  const rooms = myDeptRooms();
+  if (chatRoom === 'dept' && (!chatDept || !rooms.includes(chatDept))) chatDept = rooms[0] || null;
+  const nb = n => n ? ` <i class="segn">${ar(Math.min(n, 99))}</i>` : '';
+  seg.innerHTML = `<button type="button" data-room="pub" class="${chatRoom === 'pub' ? 'on' : ''}">العام${nb(unread())}</button>${rooms.length ? `<button type="button" data-room="dept" class="${chatRoom === 'dept' ? 'on' : ''}">${canSee() ? 'الأقسام' : rooms.length > 1 ? 'الأقسام' : 'القسم'}${nb(allDeptUnread())}</button>` : ''}<button type="button" data-room="dm" class="${chatRoom === 'dm' ? 'on' : ''}">الخاص${nb(allDmUnread())}</button>`;
+  const bar = $('roomBar'), list = $('dmList'), box = $('msgs'), form = $('chatForm');
+  const showMsgs = !(chatRoom === 'dm' && !chatPeer);
+  box.hidden = !showMsgs; form.hidden = !showMsgs; list.hidden = showMsgs;
+  if (chatRoom === 'dept') bar.innerHTML = rooms.length > 1 ? `<div class="dchips">${rooms.map(d => `<button type="button" data-rd="${esc(d)}" class="${d === chatDept ? 'on' : ''}">${esc(d)}${nb(deptUnread(d))}</button>`).join('')}</div>` : `<p class="muted small roomnote">${ic('users', 14)} شات قسم ${esc(chatDept || '')} · يشوفه موظفين القسم ومديره والإدارة</p>`;
+  else if (chatRoom === 'dm' && chatPeer) { const p = personOf(chatPeer); bar.innerHTML = `<div class="dmhead"><button type="button" class="navb" id="dmBack" aria-label="رجوع">${ic('right', 16)}</button><span class="wav">${p.photoSm ? `<img src="${p.photoSm}" alt="">` : esc(initials(p.name))}</span><span><b>${esc(p.name)}</b><small>${esc(p.dept || '')} · ${ic('key', 11)} محادثة خاصة بينكم إنتوا الاتنين بس</small></span></div>`; }
+  else if (chatRoom === 'dm') bar.innerHTML = `<p class="muted small roomnote">${ic('key', 14)} الرسايل الخاصة بتبقى بين الاتنين بس، ومحدش تاني يقدر يقراها.</p>`;
+  else bar.innerHTML = '';
+  if (!showMsgs) paintDmList(); else paintChat();
+}
+function paintDmList() {
+  const el = $('dmList'); if (!el) return; const hadF = document.activeElement && document.activeElement.id === 'dmQ';
+  const conv = {}; allDms().forEach(m => { const o = m.from === me.uid ? m.to : m.from; conv[o] = m; });
+  const convs = Object.entries(conv).sort((a, b) => b[1].atMs - a[1].atMs);
+  const q = normQ(dmQ), parts = q ? q.split(' ') : [];
+  const cands = [...(isOwner ? [] : [ownerP()]), ...people.filter(p => p.active !== false && p.id !== me.uid)].filter(p => parts.every(x => normQ(p.name + ' ' + (p.dept || '')).includes(x)));
+  const row = (p, m) => `<button type="button" class="dmrow" data-peer="${esc(p.id)}"><span class="wav">${p.photoSm ? `<img src="${p.photoSm}" alt="">` : esc(initials(p.name))}</span><span class="dmi"><b>${esc(p.name)}</b><small>${m ? (m.from === me.uid ? 'إنت: ' : '') + esc(msgTxt(m)) : esc(p.dept || '')}</small></span>${m ? `<span class="dmt"><small>${isToday(keyOfIdx(dayIdx(m.atMs))) ? clockFmt.format(new Date(m.atMs)) : dFmt.format(new Date(m.atMs))}</small>${dmUnread(p.id) ? `<i class="segn">${ar(dmUnread(p.id))}</i>` : ''}</span>` : ''}</button>`;
+  el.innerHTML = `<label class="esearch">${ic('search', 16)}<input id="dmQ" type="search" placeholder="ابحث عن حد تكلّمه" value="${esc(dmQ)}" autocomplete="off"></label>
+    ${q ? `<div class="dmsec">${cands.length ? cands.map(p => row(p, conv[p.id])).join('') : '<p class="muted small qempty">مفيش حد بالاسم ده</p>'}</div>`
+      : `${convs.length ? `<small class="dmcap">المحادثات</small><div class="dmsec">${convs.map(([id, m]) => row(personOf(id), m)).join('')}</div>` : ''}<small class="dmcap">ابدأ محادثة جديدة</small><div class="dmsec">${cands.filter(p => !conv[p.id]).map(p => row(p, null)).join('') || '<p class="muted small qempty">مفيش حد تاني</p>'}</div>`}`;
+  const i = $('dmQ'); i.oninput = () => { dmQ = i.value; paintDmList(); };
+  if (hadF) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
 let chatFirst = true;
 let remoteRead = 0, readSaved = 0;
 const lastRead = () => { let l = 0; try { l = +(localStorage.getItem('sh-chat-read-' + (me && me.uid)) || 0); } catch (e) { } return Math.max(l, remoteRead); };
 // آخر قراية للشات محفوظة أونلاين، عشان لما تخرج وتدخل أو تفتح من جهاز تاني الإشعار مايرجعش
-function onReads(s) { const v = s.exists() ? +(s.data().chat || 0) : 0; if (v > remoteRead) { remoteRead = v; readSaved = Math.max(readSaved, v); if (!$('tabbar').hidden) paintTabs(); setBadge(); } }
+function onReads(s) { if (s.exists()) { const dd = s.data(); Object.keys(dd).forEach(k => { if (k !== 'chat') roomReads[k] = Math.max(+(roomReads[k] || 0), +dd[k] || 0); }); } const v = s.exists() ? +(s.data().chat || 0) : 0; if (v > remoteRead) { remoteRead = v; readSaved = Math.max(readSaved, v); if (!$('tabbar').hidden) paintTabs(); setBadge(); } }
 function clearChatNotifs() { try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(r => r && r.getNotifications ? r.getNotifications({ tag: 'chat' }) : []).then(ns => ns.forEach(n => n.close())).catch(() => { }); } catch (e) { } }
 const unread = () => { const lr = lastRead(); return msgs.filter(m => m.atMs > lr && m.uid !== (me && me.uid)).length; };
 function markChatRead() {
@@ -2071,7 +2226,7 @@ function onChat(snap) {
     });
   }
   chatFirst = false;
-  if (view === 'vChat') { paintChat(); if (!document.hidden) markChatRead(); }
+  if (view === 'vChat') { paintRoom(); markCurRead(); }
   if (!$('tabbar').hidden) paintTabs();
   setBadge();
 }
@@ -2081,6 +2236,9 @@ function renderChat() {
   v.innerHTML = `<section class="card chatcard reveal">
     <h2>${esc(T('chatTitle'))} <span class="muted small" style="font-family:var(--f-body)">${esc(T('chatSub'))}</span></h2>
     ${chatNotifCta()}
+    <div class="seg chatseg" id="chatSeg"></div>
+    <div id="roomBar"></div>
+    <div class="dmlist" id="dmList" hidden></div>
     <div class="msgs" id="msgs"></div>
     <form class="composer" id="chatForm">
      <button class="cbtn" id="chatImg" type="button" aria-label="إرفاق صورة أو ملف">${ic('clip', 21)}</button>
@@ -2099,7 +2257,7 @@ function renderChat() {
   $('chatForm').onsubmit = async e => {
     e.preventDefault(); const text = ta.value.trim(); if (!text) return;
     ta.value = ''; ta.oninput();
-    try { await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), ph: (!canSee() && meEmp.photoSm) || null, owner: isOwner, text, at: serverTimestamp() }); }
+    try { const [c, b] = roomPayload(); await addDoc(collection(db, c), { ...b, text }); }
     catch (err) { toast('bad', 'لم تُرسل الرسالة', 'تأكد من الإنترنت وحاول مرة أخرى', 'الشات'); ta.value = text; }
   };
   $('msgs').onclick = async e => {
@@ -2107,8 +2265,11 @@ function renderChat() {
     const im = e.target.closest('[data-media] img'); if (im && im.dataset.full) { openViewer(im.src); return; }
     const fl = e.target.closest('[data-file]'); if (fl) { openFile(fl); return; }
     const b = e.target.closest('[data-mact]'); if (!b) return;
-    const m = msgs.find(x => x.id === b.dataset.mact); if (m) openMsgActions(m);
+    const m = curMsgs().find(x => x.id === b.dataset.mact); if (m) openMsgActions(m);
   };
+  $('chatSeg').onclick = e => { const b = e.target.closest('[data-room]'); if (!b || b.dataset.room === chatRoom) return; chatRoom = b.dataset.room; if (chatRoom !== 'dm') chatPeer = null; paintRoom(); paintChat(true); markCurRead(); };
+  $('roomBar').onclick = e => { if (e.target.closest('#dmBack')) { chatPeer = null; paintRoom(); return; } const b = e.target.closest('[data-rd]'); if (b) { chatDept = b.dataset.rd; paintRoom(); paintChat(true); markCurRead(); } };
+  $('dmList').onclick = e => { const b = e.target.closest('[data-peer]'); if (!b) return; chatPeer = b.dataset.peer; dmQ = ''; paintRoom(); paintChat(true); markCurRead(); setTimeout(() => ta.focus(), 50); };
   // صورة
   const am = $('attMenu');
   $('chatImg').onclick = e => { e.stopPropagation(); am.hidden = !am.hidden; };
@@ -2135,8 +2296,10 @@ function renderChat() {
   $('recCancel').onclick = () => stopRec(false);
   $('recSend').onclick = () => stopRec(true);
   const cb = $('chatNotif'); if (cb) cb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } renderChat(); };
-  paintChat(true); markChatRead(); paintTabs();
+  paintRoom(); paintChat(true); markCurRead(); paintTabs();
 }
+// فتح محادثة خاصة مع شخص من أي مكان
+function openDm(uid) { chatRoom = 'dm'; chatPeer = uid; openTab('vChat'); }
 function chatNotifCta() {
   const p = ('Notification' in window) ? Notification.permission : 'unsupported';
   if (p === 'default') return `<button class="btn ghost" id="chatNotif" style="margin-bottom:10px">${ic('bell', 16)} فعّل الإشعارات عشان توصلك الرسايل على الجوال</button>`;
@@ -2156,23 +2319,23 @@ function openMsgActions(m) {
   $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
   if ($('meSaveMsg')) $('meSaveMsg').onclick = async () => {
     const t = $('meEdit').value.trim(); if (!t) { $('msgErr').textContent = 'الرسالة فاضية، لو عايز تشيلها دوس حذف'; return; }
-    try { await updateDoc(doc(db, 'chat', m.id), { text: t, edited: true, editedAt: serverTimestamp() }); closeSheet(); toast('ok', 'تم تعديل الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = errWhy(x); }
+    try { await updateDoc(doc(db, m._col || 'chat', m.id), { text: t, edited: true, editedAt: serverTimestamp() }); closeSheet(); toast('ok', 'تم تعديل الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = errWhy(x); }
   };
   $('meDelMsg').onclick = async () => {
     const b = $('meDelMsg'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('alert', 16)} متأكد؟ اضغط تاني للحذف`; return; }
-    try { await deleteDoc(doc(db, 'chat', m.id)); if (m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = 'تعذّر الحذف'; }
+    try { await deleteDoc(doc(db, m._col || 'chat', m.id)); if (m.media) deleteDoc(doc(db, 'media', m.media)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف الرسالة', '', 'الشات'); } catch (x) { $('msgErr').textContent = 'تعذّر الحذف'; }
   };
 }
 function paintChat(jump) {
   const box = $('msgs'); if (!box) return;
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  let lastDay = '', h = '';
-  msgs.forEach(m => {
+  let lastDay = '', h = ''; const list = curMsgs(), isDm = chatRoom === 'dm';
+  list.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who${(canSee() || isWatch) && !m.owner && empById(m.uid) ? ' whob" role="button" tabindex="0" data-whouid="' + esc(m.uid) + '" title="عرض ملف ' + esc(m.name || '') : ''}" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who${(canSee() || isWatch) && !m.owner && empById(m.uid) ? ' whob" role="button" tabindex="0" data-whouid="' + esc(m.uid) + '" title="عرض ملف ' + esc(m.name || '') : ''}" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${isDm && mine ? ` <i class="seen ${m.seen ? 'ok' : ''}" title="${m.seen ? 'اتقرت' : 'اتبعتت'}">${m.seen ? '✓✓' : '✓'}</i>` : ''}${mine || (isOwner && !isDm) ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
   });
-  box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
+  box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>${chatRoom === 'dept' ? 'الرسايل هنا يشوفها موظفين قسم ' + esc(chatDept || '') + ' ومديره والإدارة بس.' : isDm ? 'الرسايل هنا بينكم إنتوا الاتنين بس.' : 'الرسائل هنا يشوفها كل موظفي الشركة والمالك'}، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
   hydrateImages(box);
 }
@@ -2254,7 +2417,8 @@ async function packImage(file) {
 async function sendMedia(kind, data, extra) {
   const ref = await addDoc(collection(db, 'media'), { uid: me.uid, kind, data, at: serverTimestamp() });
   mediaCache[ref.id] = Promise.resolve(data);
-  await addDoc(collection(db, 'chat'), { uid: me.uid, name: isOwner ? 'الإدارة' : isViewer ? viewerName : meEmp.name, dept: isOwner ? '' : isViewer ? 'متابعة' : (meEmp.dept || ''), ph: (!canSee() && meEmp.photoSm) || null, owner: isOwner, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, fname: extra.fname || null, size: extra.size || null, at: serverTimestamp() });
+  const [c, b] = roomPayload();
+  await addDoc(collection(db, c), { ...b, kind, media: ref.id, text: extra.text || '', w: extra.w || null, h: extra.h || null, thumb: extra.thumb || null, dur: extra.dur || null, fname: extra.fname || null, size: extra.size || null, at: serverTimestamp() });
 }
 const REC_MAX = 120;
 let rec = null;
@@ -2381,7 +2545,7 @@ function renderOwnerInner() {
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
-      const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '');
+      const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '') + (r && r.outNote ? ` · <em class="lnote">سبب الانصراف: ${esc(r.outNote)}</em>` : '');
       const av = e.photoSm || e.photo || (r && ALL.map(f => r.ph[f]).filter(Boolean).pop()); const lv = fresh(lives[e.id]);
       return `<button class="emp" data-emp="${e.id}" data-q="${esc(empHay(e))}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span>${e.active ? `<small class="sexp">${esc(shiftExplain(e, key))}</small>` : ''}</div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
     }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : isViewer ? 'لا يوجد موظفون بعد' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
@@ -2541,7 +2705,9 @@ function openSheet(id) {
     </div>
     <div class="row-btns" style="margin:-4px 0 14px">
       <button class="btn ghost" id="shActive">${emp.active ? 'إيقاف الحساب' : 'تفعيل الحساب'}</button>
+      <label class="mgrsel">${ic('users', 14)} مدير قسم <select id="shMgr"><option value="">لأ</option>${deptList().map(d => `<option value="${esc(d)}" ${emp.mgr === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label>
       <button class="btn ghost" id="shWatch">${ic('eye', 14)} ${emp.watch ? 'إلغاء صلاحية المراقب' : 'صلاحية مراقب'}</button>
+      <button class="btn ghost danger-t" id="shRst">${ic('restart', 14)} ريستارت للموظف ده</button>
       <button class="btn ghost danger-t" id="shDel">${ic('trash', 14)} حذف الموظف</button>
       ${emp.cred ? `<button class="btn ghost" id="shDev">${ic('device', 14)} إلغاء ربط الجهاز</button>` : `<span class="muted small" style="align-self:center">${ic('device', 13)} لم يربط جهازاً بعد</span>`}
     </div>
@@ -2628,11 +2794,13 @@ function openSheet(id) {
     const k = $('mDay').value || todayKey(); if (k > todayKey()) { $('shErr').textContent = 'مينفعش تحضّر في يوم لسه ماجاش'; return; }
     const idx = idxOfKey(k), data = { uid: emp.id, day: idx };
     Object.entries(vals).forEach(([f, v]) => { const pk = FMAP[f]; if (v == null) { data[pk] = deleteField(); data[pk + '_m'] = deleteField(); } else { data[pk] = Timestamp.fromMillis(idx * DAY - OFF + v * 60000); data[pk + '_m'] = 'manual'; } });
-    try { await setDoc(doc(db, 'days', emp.id + '_' + idx), data, { merge: true }); $('shErr').textContent = ''; toast('ok', 'تم حفظ أوقات ' + emp.name, dFmt.format(fromKey(k)), 'الإدارة'); }
+    try { await setDoc(doc(db, 'days', emp.id + '_' + idx), { ...data, dept: emp.dept || '' }, { merge: true }); $('shErr').textContent = ''; toast('ok', 'تم حفظ أوقات ' + emp.name, dFmt.format(fromKey(k)), 'الإدارة'); }
     catch (x) { $('shErr').textContent = errWhy(x); }
   };
   $('mSave').onclick = () => { const vals = {}; let bad = false; $('mTimes').querySelectorAll('input[type=time]').forEach(i => { const v = i.value ? fromHHMM(i.value) : null; if (i.value && v == null) bad = true; vals[i.dataset.f] = v; }); if (bad) { $('shErr').textContent = 'وقت غير صحيح'; return; } saveTimes(vals); };
   $('mNow').onclick = () => { $('mDay').value = todayKey(); const r = getRec(emp, todayKey()), f = nextField(r, todayPlan(emp)) || 'in'; saveTimes({ [f]: Math.floor(nowMin()) }).then(paintTimes); };
+  $('shRst').onclick = () => openEmpReset(emp);
+  $('shMgr').onchange = async e => { const v = e.target.value; try { await updateDoc(doc(db, 'employees', emp.id), { mgr: v || deleteField() }); toast('ok', v ? emp.name + ' بقى مدير قسم ' + v : 'اتشالت إدارة القسم من ' + emp.name, v ? 'هيظهرله تبويب «قسمي» يتابع منه موظفين القسم' : '', 'الإدارة'); } catch (x) { $('shErr').textContent = errWhy(x); } };
   $('shDel').onclick = async () => {
     const b = $('shDel'); if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.innerHTML = `${ic('trash', 14)} اضغط تاني للتأكيد`; setTimeout(() => { if (b.isConnected) { b.dataset.sure = ''; b.innerHTML = `${ic('trash', 14)} حذف الموظف`; } }, 4000); return; }
     try { await deleteDoc(doc(db, 'employees', emp.id)); deleteDoc(doc(db, 'live', emp.id)).catch(() => { }); closeSheet(); toast('ok', 'تم حذف ' + emp.name, 'سجلات حضوره القديمة محفوظة في النسخة الاحتياطية', 'الإدارة'); } catch (x) { $('shErr').textContent = 'تعذّر الحذف'; }
@@ -2948,7 +3116,7 @@ function renderUi() {
 function paintDepts() {
   const el = $('deptList'); if (!el) return;
   el.innerHTML = deptList().map((d, i) => { const r = deptRule(d), n = emps.filter(e => e.dept === d).length; return `<div class="drow" data-i="${i}">
-    <div class="dh"><input class="dname" data-old="${esc(d)}" value="${esc(d)}" maxlength="30" aria-label="اسم القسم"><span class="muted small">${ar(n)} موظف</span><button class="navb" type="button" data-ddel="${esc(d)}" aria-label="مسح القسم">${ic('trash', 15)}</button></div>
+    <div class="dh"><input class="dname" data-old="${esc(d)}" value="${esc(d)}" maxlength="30" aria-label="اسم القسم"><span class="muted small">${ar(n)} موظف${(() => { const m = emps.find(e => e.mgr === d); return m ? ' · المدير: ' + esc(m.name) : ''; })()}</span><button class="navb" type="button" data-ddel="${esc(d)}" aria-label="مسح القسم">${ic('trash', 15)}</button></div>
 </div>`; }).join('');
 }
 async function saveDepts(list, rules, msg) {
@@ -3002,29 +3170,92 @@ async function runBackup(withToast) {
 }
 async function exportCsv() {
   try {
-    const rows = [['الموظف', 'القسم', 'اسم المستخدم', 'التاريخ', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'الحالة', 'سبب التأخير', 'حي الإشراف']];
+    const rows = [['الموظف', 'القسم', 'اسم المستخدم', 'التاريخ', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'الحالة', 'سبب التأخير', 'سبب الانصراف', 'حي الإشراف']];
     const L = { g: 'في الموعد', y: 'متأخر', r: 'تأخير كبير' };
     emps.forEach(e => Object.keys(recs[e.id] || {}).sort().forEach(k => {
       const r = getRec(e, k); if (!r) return; const P = planKey(k, e);
       const t = f => r[f] != null ? tm(r[f]) + (r.m[f] === 'auto' ? ' (تلقائي)' : r.m[f] === 'manual' ? ' (يدوي)' : '') : '';
       const lv = r.in != null ? lvlOf('in', r.in, P) : '';
-      rows.push([e.name, e.dept, e.num, k, t('in'), t('out1'), t('in2'), t('out'), r.in == null ? 'نصف يوم' : r.in < (P.start || 0) ? 'بدري' : (L[lv] || ''), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
+      rows.push([e.name, e.dept, e.num, k, t('in'), t('out1'), t('in2'), t('out'), r.in == null ? 'نصف يوم' : r.in < (P.start || 0) ? 'بدري' : (L[lv] || ''), [r.note, r.note2].filter(Boolean).join(' / '), r.outNote || '', [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
     }));
     const csv = '\ufeff' + rows.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(',')).join('\r\n');
     saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `shamrani-attendance-${todayKey()}.csv`);
     toast('ok', 'تم تنزيل كشف الحضور', ar(rows.length - 1) + ' سجل · يفتح على Excel', 'الإعدادات');
   } catch (x) { toast('bad', 'تعذّر التنزيل', errWhy(x), 'الإعدادات'); }
 }
+function openEmpReset(emp) {
+  const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
+  const tom = keyOfIdx(todayIdx() + 1);
+  inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--bad);color:#fff">${ic('restart', 22)}</div><b>ريستارت ${esc(emp.name)} <span class="muted small">يبدأ من جديد</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
+    <div class="rswarn">${ic('alert', 18)}<span>الخطوة دي مش بترجع. هتتنزّل نسخة احتياطية لبيانات الموظف ده قبل المسح.</span></div>
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="erDays" checked><span><b>أيامه:</b> امسح كل حضوره وانصرافه وغيابه وتأخيره وصور المواقع واللايف</span></label>
+    <div class="fl" style="margin-top:8px"><label for="erStart">يبدأ تسجيله من</label><select id="erStart"><option value="${tom}" selected>بكره</option><option value="${todayKey()}">النهارده</option><option value="custom">تاريخ تاني…</option></select></div>
+    <div class="fl" id="erDateW" hidden><label for="erDate">التاريخ</label><input type="date" id="erDate" value="${tom}"></div>
+    <label class="chk"><input type="checkbox" id="erSched" ${emp.sched && emp.sched.mode === 'custom' ? '' : 'disabled'}><span><b>مواعيده:</b> رجّعه للدوام العام ${emp.sched && emp.sched.mode === 'custom' ? '' : '<span class="muted small">(هو أصلاً على الدوام العام)</span>'}</span></label>
+    <label class="chk"><input type="checkbox" id="erLeaves" ${(emp.leaves || []).length ? 'checked' : 'disabled'}><span><b>إجازاته:</b> امسح الإجازات المسجّلة ${(emp.leaves || []).length ? '(' + ar(emp.leaves.length) + ')' : '<span class="muted small">(مفيش)</span>'}</span></label>
+    <div class="fl" style="margin-top:8px"><label for="erUser">اسم مستخدم جديد <span class="muted small">(اختياري · الحالي: ${esc(emp.num)})</span></label><input id="erUser" autocomplete="off" placeholder="سيبه فاضي لو مش هتغيّره"></div>
+    <p class="muted small" style="margin:-4px 0 6px">لو غيّرت اسم المستخدم، كلمة السر بتفضل زي ما هي، والموظف هيحتاج يسجّل دخول تاني بالاسم الجديد.</p>
+    <div class="fl" style="margin-top:6px"><label for="erPass">كلمة سر المدير</label><input id="erPass" type="password" autocomplete="current-password" placeholder="اكتب كلمة السر للتأكيد"></div>
+    <button class="btn danger" id="erGo" type="button" style="width:100%;margin-top:6px" disabled>${ic('restart', 16)} تأكيد الريستارت</button>
+    <div class="err" id="erErr"></div>`;
+  sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
+  $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
+  const go = $('erGo'), er = $('erErr');
+  const chk = () => { er.textContent = ''; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; const any = $('erDays').checked || $('erSched').checked || $('erLeaves').checked || $('erUser').value.trim(); go.disabled = !(any && $('erPass').value.length >= 6); };
+  ['erDays', 'erSched', 'erLeaves'].forEach(id => $(id).onchange = chk); $('erUser').oninput = chk; $('erPass').oninput = chk;
+  $('erStart').onchange = () => { $('erDateW').hidden = $('erStart').value !== 'custom'; chk(); };
+  go.onclick = async () => {
+    const nu = toEn($('erUser').value.trim().replace(/\s+/g, ' '));
+    if (nu && !USER_OK.test(normUser(nu))) { er.textContent = 'اسم المستخدم من ٢ لـ ٢٤ حرف: حروف عربي أو إنجليزي وأرقام فقط'; return; }
+    if (nu && normUser(nu) === normUser(emp.num)) { er.textContent = 'ده نفس اسم المستخدم الحالي'; return; }
+    if (nu && emps.some(x => x.id !== emp.id && normUser(x.num) === normUser(nu))) { er.textContent = 'اسم المستخدم ده مستخدم لموظف تاني'; return; }
+    const stK = $('erStart').value === 'custom' ? ($('erDate').value || tom) : $('erStart').value;
+    if (go.dataset.sure !== '1') { go.dataset.sure = '1'; go.innerHTML = `${ic('alert', 16)} متأكد؟ اضغط تاني للتنفيذ`; return; }
+    go.disabled = true; go.textContent = 'جارٍ التحقق من كلمة السر…';
+    try { await reauthenticateWithCredential(auth.currentUser, EmailAuthProvider.credential(auth.currentUser.email, $('erPass').value)); }
+    catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; er.textContent = 'كلمة السر غلط'; return; }
+    try {
+      go.textContent = 'جارٍ تنزيل النسخة الاحتياطية…';
+      const daysSnap = await getDocs(query(collection(db, 'days'), where('uid', '==', emp.id)));
+      const visSnap = await getDocs(query(collection(db, 'visits'), where('uid', '==', emp.id)));
+      const empSnap = await getDoc(doc(db, 'employees', emp.id)), secSnap = await getDoc(doc(db, 'secrets', emp.id)).catch(() => null);
+      const bk = { at: new Date().toISOString(), employee: { id: emp.id, ...empSnap.data() }, days: daysSnap.docs.map(d => ({ id: d.id, ...d.data() })), visits: visSnap.docs.map(d => ({ id: d.id, ...d.data() })) };
+      saveBlob(new Blob([JSON.stringify(bk, (k, v) => v && typeof v.toMillis === 'function' ? new Date(v.toMillis()).toISOString() : v, 1)], { type: 'application/json' }), `shamrani-employee-${normUser(emp.num)}-${todayKey()}.json`);
+      const del = async refs => { for (let i = 0; i < refs.length; i += 400) { const b = writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit(); } };
+      const upd = { start: stK };
+      if ($('erSched').checked) upd.sched = { mode: 'global' };
+      if ($('erLeaves').checked) upd.leaves = [];
+      if ($('erDays').checked) { go.textContent = 'جارٍ مسح أيامه…'; await del([...daysSnap.docs.map(d => d.ref), ...visSnap.docs.map(d => d.ref)]); await deleteDoc(doc(db, 'live', emp.id)).catch(() => { }); Object.keys(recs[emp.id] || {}).forEach(k => delete recs[emp.id][k]); }
+      if (!nu) { await updateDoc(doc(db, 'employees', emp.id), upd); closeSheet(); toast('ok', 'تم ريستارت ' + emp.name, 'بيبدأ من ' + (stK === todayKey() ? 'النهارده' : stK === tom ? 'بكره' : stK), 'الإدارة'); refresh(); return; }
+      // تغيير اسم المستخدم: حساب دخول جديد بنفس كلمة السر، ونقل بياناته عليه
+      const pw = secSnap && secSnap.exists() ? secSnap.data().pw : null;
+      if (!pw) throw { msg: 'كلمة سر الموظف مش متسجّلة. غيّر كلمة سره الأول من ملفه، وبعدين غيّر اسم المستخدم' };
+      go.textContent = 'جارٍ إنشاء اسم المستخدم الجديد…';
+      const sec = getSecondary();
+      let oldUser; try { oldUser = (await signInWithEmailAndPassword(sec.auth, toEmail(emp.num), pw)).user; } catch (x) { throw { msg: 'الموظف غيّر كلمة السر من عنده. غيّر كلمة سره من ملفه الأول وبعدين جرّب تاني' }; }
+      await signOut(sec.auth);
+      const nc = await createUserWithEmailAndPassword(sec.auth, toEmail(nu), pw), nid = nc.user.uid; await signOut(sec.auth);
+      const data = { ...empSnap.data(), ...upd, num: nu, cred: null, movedFrom: emp.id };
+      await setDoc(doc(db, 'employees', nid), data);
+      await setDoc(doc(db, 'secrets', nid), { pw, at: serverTimestamp() });
+      if (!$('erDays').checked) { go.textContent = 'جارٍ نقل أيامه…'; for (let i = 0; i < daysSnap.docs.length; i += 400) { const b = writeBatch(db); daysSnap.docs.slice(i, i + 400).forEach(d => { const x = d.data(); b.set(doc(db, 'days', nid + '_' + x.day), { ...x, uid: nid }); b.delete(d.ref); }); await b.commit(); } }
+      await deleteDoc(doc(db, 'live', emp.id)).catch(() => { });
+      await deleteDoc(doc(db, 'secrets', emp.id)).catch(() => { });
+      await deleteDoc(doc(db, 'employees', emp.id));
+      try { const o = await signInWithEmailAndPassword(sec.auth, toEmail(emp.num), pw); await deleteUser(o.user); } catch (x) { } finally { signOut(sec.auth).catch(() => { }); }
+      closeSheet(); toast('ok', 'تم ريستارت ' + emp.name, 'اسم المستخدم الجديد «' + nu + '» وكلمة السر زي ما هي · لازم يسجّل دخول تاني', 'الإدارة'); refresh();
+    } catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; er.textContent = x && x.msg ? x.msg : (x && x.code ? authMsg(x) : 'حصلت مشكلة: ' + errWhy(x)); }
+  };
+}
 function openReset() {
   const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'); sheetEmp = null; liveSheetId = null;
   inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--bad);color:#fff">${ic('restart', 22)}</div><b>ريستارت التطبيق <span class="muted small">بدء من جديد</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
     <div class="rswarn">${ic('alert', 18)}<span>الخطوة دي مش بترجع. هيتنزّل نسخة احتياطية تلقائياً قبل المسح.</span></div>
     <b class="gt" style="display:block;margin:12px 0 6px">هيتمسح:</b>
-    <label class="chk"><input type="checkbox" checked disabled><span>كل سجلات الحضور والانصراف</span></label>
-    <label class="chk"><input type="checkbox" id="rsChat"><span>الشات والصور والملفات والرسايل الصوتية</span></label>
-    <label class="chk"><input type="checkbox" id="rsLive" checked><span>المواقع المباشرة ومسارات الحركة</span></label>
+    <p class="muted small" style="margin:0">كل الحضور والانصراف والغياب والتأخير، وأسباب التأخير والانصراف، والإجازات المسجّلة، وتسجيلات الإشراف وصور المواقع، واللايف لوكيشن، والشات والصور والملفات، والإشعارات. يعني التطبيق يبدأ من جديد كأن محدش سجّل قبل كده.</p>
     <b class="gt" style="display:block;margin:12px 0 6px">هيفضل زي ما هو:</b>
-    <p class="muted small" style="margin:0">الموظفين وحساباتهم وكلمات السر، الأقسام، المواعيد، فترة السماح، مواقع العمل، حسابات المتابعة. والعدّ لكل موظف هيبدأ من النهارده.</p>
+    <p class="muted small" style="margin:0">الموظفين وبياناتهم وصورهم وحساباتهم وكلمات السر، الأقسام، المواعيد، فترة السماح، الصلاحيات، حسابات المتابعة، والتخصيص.</p>
+    <div class="fl" style="margin-top:12px"><label for="rsStart">يبدأ تسجيل الحضور من</label><select id="rsStart"><option value="tom" selected>بكره · ${esc(dFmt.format(fromKey(keyOfIdx(todayIdx() + 1))))}</option><option value="today">النهارده</option></select></div>
     <label class="chk" style="margin-top:12px"><input type="checkbox" id="rsAgree"><span><b>موافق</b>، أنا عارف إن السجلات هتتمسح</span></label>
     <div class="fl" style="margin-top:10px"><label for="rsPass">كلمة سر المدير</label><input id="rsPass" type="password" autocomplete="current-password" placeholder="اكتب كلمة السر للتأكيد"></div>
     <button class="btn danger" id="rsGo" type="button" style="width:100%;margin-top:12px" disabled>${ic('restart', 16)} تأكيد الريستارت</button>
@@ -3040,21 +3271,23 @@ function openReset() {
     catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; $('rsErr').textContent = 'كلمة السر غلط'; return; }
     try {
       go.textContent = 'جارٍ تنزيل النسخة الاحتياطية…'; await runBackup(false);
-      const cols = ['days'].concat($('rsLive').checked ? ['live'] : [], $('rsChat').checked ? ['chat', 'media', 'reads'] : []);
+      const cols = ['days', 'live', 'visits', 'chat', 'dchat', 'media'];
       let n = 0;
       for (const c of cols) {
         const snap = await getDocs(collection(db, c));
         for (let i = 0; i < snap.docs.length; i += 400) { const b = writeBatch(db); snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref)); await b.commit(); n += Math.min(400, snap.docs.length - i); go.textContent = 'جارٍ المسح… ' + ar(n); }
       }
-      const b = writeBatch(db); emps.forEach(e => b.update(doc(db, 'employees', e.id), { start: todayKey() })); await b.commit();
+      const stK = $('rsStart').value === 'today' ? todayKey() : keyOfIdx(todayIdx() + 1);
+      const b = writeBatch(db); emps.forEach(e => b.update(doc(db, 'employees', e.id), { start: stK, leaves: [] })); await b.commit();
+      try { Object.keys(localStorage).filter(k => /^sh-(feed|notif|evlog|bell)/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) { }
       await setDoc(doc(db, 'settings', 'main'), { resetAt: serverTimestamp() }, { merge: true });
-      recs = {}; closeSheet(); toast('ok', 'تم الريستارت', 'كل الموظفين بيبدأوا من النهارده · النسخة الاحتياطية اتنزّلت', 'الإعدادات'); refresh();
+      recs = {}; closeSheet(); toast('ok', 'تم الريستارت', 'كل الموظفين بيبدأوا من ' + (stK === todayKey() ? 'النهارده' : 'بكره') + ' · النسخة الاحتياطية اتنزّلت', 'الإعدادات'); refresh();
     } catch (x) { go.disabled = false; go.dataset.sure = ''; go.innerHTML = `${ic('restart', 16)} تأكيد الريستارت`; $('rsErr').textContent = 'حصلت مشكلة: ' + errWhy(x); }
   };
 }
 
 /* ========== data wiring ========== */
-function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; setWatch(false); visits = []; myVisits = []; visitsFirst = true; mapTab = 'live'; }
+function stopAll() { unsubs.forEach(f => { try { f(); } catch (e) { } }); unsubs = []; dchatUnsubs.forEach(f => { try { f(); } catch (e) { } }); dchatUnsubs = []; dchatKey = ''; dmSubbed = false; dchat = []; dmA = []; dmB = []; people = []; roomReads = {}; rrSaved = {}; chatRoom = 'pub'; chatPeer = null; chatDept = null; watchUnsubs.forEach(u => { try { u(); } catch (e) { } }); watchUnsubs = []; wEmps = []; isWatch = false; watchDept = null; watchKey = ''; emps = []; recs = {}; meEmp = null; settings = {}; lives = {}; msgs = []; firstDays = true; liveFirst = true; chatFirst = true; remoteRead = 0; readSaved = 0; setWatch(false); visits = []; myVisits = []; visitsFirst = true; mapTab = 'live'; }
 function onDays(snap) {
   const changes = firstDays ? [] : snap.docChanges();
   const prev = {};
@@ -3069,6 +3302,7 @@ function onDays(snap) {
     changes.forEach(c => {
       if (c.type === 'removed') return; const d = c.doc.data(); if (d.day !== todayIdx()) return;
       const now = recs[d.uid][keyOfIdx(d.day)], was = prev[c.doc.id], e = empById(d.uid); if (!now || !e) return;
+      if (now.outNote && (!was || was.outNote !== now.outNote)) alertBoth('info', `${e.name} انصرف`, `السبب: ${now.outNote}`, 'إشعار للمالك', 'out-' + d.uid, 'vOwn');
       [['note', 'الحضور'], ['note2', 'العودة']].forEach(([k, lb]) => { if (now[k] && (!was || was[k] !== now[k])) alertBoth('warn', `سبب تأخير ${e.name}`, `${lb}: ${now[k]}`, 'إشعار للمالك', 'late-' + d.uid + k, 'vOwn'); });
       ALL.forEach(f => {
         if (now[f] != null && (!was || was[f] == null) && now[f] >= nowMin() - 10) {
@@ -3119,7 +3353,7 @@ function startSession(u) {
     renderMsg('جارٍ تحميل البيانات…', '');
     let gotEmps = false;
     unsubs.push(onSnapshot(collection(db, 'employees'), s => {
-      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? name2(viewerName) : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
+      emps = s.docs.map(empFromDoc); setTimeout(() => { subRooms(); if (isOwner) syncMyPeople(); }, 0); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? name2(viewerName) : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
     }, err => renderMsg('تعذّر تحميل الموظفين', 'تأكد من لصق قواعد الحماية في Firebase وأن رقم المالك صحيح.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', yearStart)), onDays, () => { }));
     unsubs.push(onSnapshot(collection(db, 'live'), onLive, () => { }));
@@ -3131,8 +3365,9 @@ function startSession(u) {
     unsubs.push(onSnapshot(doc(db, 'employees', u.uid), s => {
       if (!s.exists()) { renderMsg('حسابك غير مسجّل كموظف', 'تواصل مع المالك لتفعيل حسابك.'); return; }
       meEmp = empFromDoc(s); emps = [meEmp];
-      setWatch(meEmp.watch && meEmp.active);
+      setWatch((meEmp.watch || !!meEmp.mgr) && meEmp.active, meEmp.watch ? null : (meEmp.mgr || null));
       $('userChip').textContent = meEmp.name;
+      if (meEmp.active) setTimeout(() => { if (meEmp && meEmp.active) { subRooms(); syncMyPeople(); } }, 0);
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
       if (!meEmp.photo && !meEmp.profileDone) { if (view !== 'vSetup') renderSetup(); first = true; return; }
