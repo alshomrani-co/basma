@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=29';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=30';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -181,6 +181,8 @@ const nset = (k, d) => Number.isFinite(+settings[k]) && settings[k] !== '' && se
 const grace = () => nset('grace', DEF_GRACE);          // الحضور: أخضر لحد كده
 const redIn = () => Math.max(grace(), nset('redIn', 15)); // الحضور: أصفر لحد كده، وبعده أحمر
 const brG = () => nset('brGrace', 5);                   // العودة من البريك: أخضر لحد كده
+const absAfter = () => nset('absAfter', 60);                // الغياب بعد كده من بداية الدوام
+const absT = P => Math.min(P.end, P.start + absAfter());
 const brR = () => Math.max(brG(), nset('brRed', 10));   // العودة: أصفر لحد كده، وبعده أحمر
 // خروج البريك والانصراف بيتسجلوا تلقائياً في مواعيدهم
 function autoRec(r, key, emp) {
@@ -257,7 +259,7 @@ function status(emp, key) {
   const P = planKey(key, emp);
   if (P.off) return 'off';
   const r = getRec(emp, key), isT = isToday(key), n = nowMin();
-  if (!r) { if (isT) return n <= P.start + grace() ? 'pending' : n <= P.end ? 'missing' : 'absent'; return 'absent'; }
+  if (!r) { if (isT) return n <= P.start + grace() ? 'pending' : n <= absT(P) ? 'missing' : 'absent'; return 'absent'; }
   if (r.in == null) return 'half';
   if (P.two && !isT && r.in2 == null) return 'half';
   return isLate(r, P) ? 'late' : 'present';
@@ -1047,7 +1049,7 @@ function dayStatus(e, k) {
   if (onLeave(e, k)) return { s: 'leave', P };
   if (P.off) return { s: 'off', P };
   if (isToday(k) && nowMin() <= P.start + grace()) return { s: 'wait', P };
-  if (isToday(k) && nowMin() <= P.end) return { s: 'notyet', P };
+  if (isToday(k) && nowMin() <= absT(P)) return { s: 'notyet', P };
   return { s: 'absent', P };
 }
 const DS = { leave: ['في إجازة', 'c-leave'], ok: ['في الموعد', 'c-present'], early: ['بدري', 'c-present'], late: ['متأخر', 'c-late'], vlate: ['تأخير كبير', 'c-absent'], absent: ['غائب', 'c-absent'], off: ['إجازة', 'c-off'], wait: ['دوامه لسه ما بدأش', 'c-off'], notyet: ['متأخر · لسه ما وصلش', 'c-late'], extra: ['حضر في إجازة', 'c-break'] };
@@ -1107,7 +1109,7 @@ async function exportXlsx(fromK, toK, label, fname) {
         const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
         if (!P.off) wd++;
         const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '']); } continue; }
-        if (!has) { if (P.off || (isToday(k) && nowMin() <= P.end)) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
+        if (!has) { if (P.off || (isToday(k) && nowMin() <= absT(P))) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
         pr++; const w = worked(r, k, e); mins += w;
         let st = 'حضر في إجازة', late = 0;
         if (!P.off) {
@@ -1157,7 +1159,7 @@ function shiftExplain(e, k) {
   const P = planKey(k, e), r = getRec(e, k), lv = onLeave(e, k), isT = isToday(k), n = nowMin();
   if (lv) return 'في إجازة ' + (LEAVE_T[lv.type] || '') + ' · العودة ' + dFmt.format(fromKey(lv.back));
   if (P.off) return 'يوم إجازة (مفيش دوام)';
-  const a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= P.end ? 'متأخر · لسه ما وصلش (الدوام لحد ' + tm(P.end) + ')' : 'غايب · ما سجّلش حضور ✗');
+  const a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= absT(P) ? 'متأخر · لسه ما وصلش (يتحسب غياب ' + tm(absT(P)) + ')' : 'غايب · ما سجّلش حضور ✗');
   if (!P.two) return a + (r && r.out != null ? ' · انصرف ' + tm(r.out) + (r.m.out === 'auto' ? ' (تلقائي)' : '') : '');
   const b = r && r.in2 != null ? 'رجع ' + tm(r.in2) + (lvlOf('in2', r.in2, P) === 'g' ? ' ✓' : ' (متأخر ' + dur(r.in2 - P.b2) + ')') : (isT && n < P.b2 + brG() ? (n >= P.b1 ? 'في البريك دلوقتي' : 'لسه ما بدأتش') : isT && n <= P.end ? 'لسه ما رجعش (الفترة لحد ' + tm(P.end) + ')' : 'ما رجعش بعد البريك ✗');
   return 'الفترة الأولى: ' + a + ' · الفترة التانية: ' + b;
@@ -2167,8 +2169,8 @@ const SF = {
   late: e => SF.notyet(e) || SF.lateIn(e),
   lateIn: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && ((r.in != null && lvlOf('in', r.in, P) !== 'g') || (P.two && r.in2 != null && lvlOf('in2', r.in2, P) !== 'g'))); },
   early: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && r.in != null && r.in <= P.start + grace()); },
-  absent: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start) return false; if (r && (r.in != null || r.in2 != null)) return false; return nowMin() > P.end; },
-  notyet: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start || (r && (r.in != null || r.in2 != null))) return false; const n = nowMin(); return n > P.start + grace() && n <= P.end; },
+  absent: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start) return false; if (r && (r.in != null || r.in2 != null)) return false; return nowMin() > absT(P); },
+  notyet: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start || (r && (r.in != null || r.in2 != null))) return false; const n = nowMin(); return n > P.start + grace() && n <= absT(P); },
   leave: e => !!onLeave(e, todayKey()),
   live: e => online(lives[e.id])
 };
@@ -2206,7 +2208,7 @@ function renderOwnerInner() {
   <div class="grid two ${stFilter !== 'all' ? 'filtering' : ''}">
    <section class="card reveal" style="animation-delay:.1s">
     <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
-    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (اللي دوامهم خلص ومسجّلوش)', late: 'المتأخرين واللي دوامهم بدأ ولسه ما وصلوش', early: 'اللي حضروا قبل نهاية فترة السماح (مثلاً لحد ' + tm((P.start || 540) + grace()) + ')', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
+    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (عدّى ساعة على دوامهم ومسجّلوش)', late: 'المتأخرين واللي لسه ما وصلوش (قبل ما تعدّي ساعة)', early: 'اللي حضروا قبل نهاية فترة السماح (مثلاً لحد ' + tm((P.start || 540) + grace()) + ')', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
@@ -2532,6 +2534,7 @@ function renderSet() {
     <div class="ggrid">
      <div class="fl"><label for="gMin">الحضور: أخضر لحد (دقيقة)</label><input id="gMin" inputmode="numeric" value="${grace()}"></div>
      <div class="fl"><label for="gRed">الحضور: أحمر بعد (دقيقة)</label><input id="gRed" inputmode="numeric" value="${redIn()}"></div>
+     <div class="fl"><label for="gAbs">يتحسب غياب بعد (دقيقة من بداية الدوام)</label><input id="gAbs" inputmode="numeric" value="${absAfter()}"></div>
      <div class="fl"><label for="gBr">العودة من البريك: أخضر لحد</label><input id="gBr" inputmode="numeric" value="${brG()}"></div>
      <div class="fl"><label for="gBrR">العودة من البريك: أحمر بعد</label><input id="gBrR" inputmode="numeric" value="${brR()}"></div>
     </div>
@@ -2605,10 +2608,11 @@ function renderSet() {
   gEx(); ['gMin', 'gRed', 'gBr', 'gBrR'].forEach(id => $(id).addEventListener('input', gEx));
   $('gForm').onsubmit = async e => {
     e.preventDefault(); const nv = id => parseInt(toEn($(id).value), 10);
-    const g = nv('gMin'), rr = nv('gRed'), b = nv('gBr'), br = nv('gBrR');
+    const g = nv('gMin'), rr = nv('gRed'), b = nv('gBr'), br = nv('gBrR'), ab = nv('gAbs');
+    if (!(ab >= 15 && ab <= 600) || ab <= g) { $('gErr').textContent = 'وقت الغياب من ١٥ لـ ٦٠٠ دقيقة، وأكبر من فترة السماح'; return; }
     if (![g, rr, b, br].every(x => x >= 0 && x <= 180)) { $('gErr').textContent = 'اكتب أرقام من ٠ إلى ١٨٠'; return; }
     if (rr < g || br < b) { $('gErr').textContent = 'وقت الأحمر لازم يكون أكبر من وقت الأخضر'; return; }
-    try { await setDoc(doc(db, 'settings', 'main'), { grace: g, redIn: rr, brGrace: b, brRed: br }, { merge: true }); $('gErr').textContent = ''; toast('ok', 'تم حفظ فترات السماح', 'تطبّق على الجميع فوراً', 'الإعدادات'); }
+    try { await setDoc(doc(db, 'settings', 'main'), { grace: g, redIn: rr, brGrace: b, brRed: br, absAfter: ab }, { merge: true }); $('gErr').textContent = ''; toast('ok', 'تم حفظ فترات السماح', 'تطبّق على الجميع فوراً', 'الإعدادات'); }
     catch (x) { $('gErr').textContent = 'تعذّر الحفظ'; }
   };
   // schedule
