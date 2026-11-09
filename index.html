@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=28">
+<link rel="manifest" href="manifest.json?v=29">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -814,6 +814,30 @@ button.okpi.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
 /* اللايف */
 .lvmini{height:190px;border-radius:14px;overflow:hidden;margin:10px 0;border:1px solid var(--line);background:var(--surface2)}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
+
+/* v29 */
+.okpi.all b{color:var(--fg)}
+.grid.two.filtering{grid-template-columns:1fr}
+.filtering .addform,.filtering .feedcard{display:none!important}
+.latepic{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;padding:10px;border:1.5px dashed var(--line);border-radius:12px;color:var(--muted);font-size:13px;cursor:pointer}
+.latepic span{display:flex;align-items:center;gap:8px}
+.latepic img{width:44px;height:44px;border-radius:8px;object-fit:cover}
+.latepic .lpx{width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;color:var(--bad)}
+.whob{cursor:pointer;border-radius:10px}
+.whob b{text-decoration:underline dotted;text-underline-offset:3px}
+@media (max-width:600px){
+ .tabbar button{padding:7px 2px 6px;gap:2px}
+ .tabbar button svg{width:20px;height:20px}
+ .tb-in{padding:5px;gap:4px;border-radius:18px}
+ body.has-tabs{padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+ .okpis{grid-template-columns:repeat(3,1fr);gap:8px}
+ .okpi{padding:9px 10px;border-radius:12px}
+ .okpi .l{font-size:11px;gap:4px}
+ .okpi .l svg{width:12px;height:12px}
+ .okpi b{font-size:21px}
+ .emp .av{width:38px;height:38px}
+}
+
 </style>
 </head>
 <body>
@@ -883,6 +907,6 @@ button.okpi.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=28"></script>
+<script type="module" src="app.js?v=29"></script>
 </body>
 </html>

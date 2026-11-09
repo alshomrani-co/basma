@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=28';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=29';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -233,6 +233,7 @@ function docToRec(d) {
   r.sph = {};
   ['in', 'in2'].forEach(f => { const st = d[FMAP[f] + '_site']; if (st && st.district) { r.site = r.site || {}; r.site[f] = st.district; } if (st && (st.thumb || st.media)) r.sph[f] = st; });
   if (d.late_note && d.late_note.text) r.note = d.late_note.text;
+  r.lph = [d.late_note, d.late_note2].filter(x => x && x.thumb).map((x, i) => ({ thumb: x.thumb, media: x.media || '', text: x.text || '' }));
   if (d.late_note2 && d.late_note2.text) r.note2 = d.late_note2.text;
   return (r.in == null && r.in2 == null && r.out == null) ? null : r;
 }
@@ -954,7 +955,7 @@ function nativeSchedule() {
         if (P.att !== false && meEmp && !canSee() && meEmp.active && k >= meEmp.start) {
           const PL = planKey(k), r = getRec(meEmp, k);
           if (onLeave(meEmp, k)) continue;
-          if (!PL.off && !(r && r.in != null)) { add(k, PL.start + 1, 'لازم تسجّل حضورك', 'الدوام بدأ الساعة ' + tm(PL.start), 'vEmp'); add(k, PL.start + 5, 'سجّل حضورك الآن', 'فترة السماح قربت تخلص', 'vEmp'); }
+          if (!PL.off && !(r && r.in != null)) { add(k, PL.start + 1, 'لازم تسجّل حضورك', 'الدوام بدأ الساعة ' + tm(PL.start), 'vEmp'); add(k, PL.start + 5, 'سجّل حضورك الآن', 'فترة السماح قربت تخلص', 'vEmp'); for (let m = PL.start + grace() + 15; m < (PL.two ? PL.b1 : PL.end) && m <= PL.start + 180; m += 15) add(k, m, 'إنت متأخر · سجّل حضورك', 'الدوام بدأ الساعة ' + tm(PL.start) + ' · سجّل أول ما توصل', 'vEmp'); }
           if (!PL.off && PL.two && !(r && r.in2 != null)) add(k, PL.b2 - 5, 'العودة من البريك بعد ٥ دقائق', 'لا تنسَ تسجيل بصمة العودة الساعة ' + tm(PL.b2), 'vEmp');
         }
       }
@@ -1139,8 +1140,9 @@ function punchCards(r, P) {
     const sp = r.sph && r.sph[f], img = (sp && sp.thumb) || r.ph[f], g = r.geo[f], mi = MI[r.m[f]] || ['check', r.m[f] || ''];
     return `<div class="pcard">${img ? `<button type="button" class="pimg" ${sp && sp.media ? `data-pmedia="${esc(sp.media)}"` : ''} data-pfull="${img}" aria-label="تكبير صورة ${FL[f]}"><img src="${img}" alt=""></button>` : `<div class="pimg none">${ic(mi[0], 22)}</div>`}
       <div class="pi"><b>${FL[f]} ${tv(f, r, P)}</b><small>${ic(mi[0], 12)} ${esc(mi[1])}${g && g.acc != null ? ' · دقة ±' + ar(g.acc) + ' م' : ''}</small>${sp && sp.district ? `<small>${ic('pin', 12)} ${esc(sp.district)}${sp.note ? ' · ' + esc(sp.note) : ''}</small>` : ''}${g ? `<a class="lnk" target="_blank" rel="noopener" href="https://maps.google.com/?q=${g.lat},${g.lng}">${ic('map', 12)} مكان التسجيل على الخريطة</a>` : ''}</div></div>`;
-  }).join('') + `</div>`;
+  }).join('') + (r.lph || []).map(x => `<div class="pcard"><button type="button" class="pimg" ${x.media ? `data-pmedia="${esc(x.media)}"` : ''} data-pfull="${x.thumb}" aria-label="تكبير صورة التأخير"><img src="${x.thumb}" alt=""></button><div class="pi"><b>صورة مع سبب التأخير</b><small>${esc(x.text)}</small></div></div>`).join('') + `</div>`;
 }
+document.addEventListener('click', e => { const w = e.target.closest('.whob[data-whouid]'); if (w && canSee()) openSheet(w.dataset.whouid); });
 document.addEventListener('click', async e => {
   const b = e.target.closest('.pimg[data-pfull]'); if (!b) return;
   let src = b.dataset.pfull; if (b.dataset.pmedia) { const full = await loadMedia(b.dataset.pmedia).catch(() => null); if (full) src = full; }
@@ -1414,6 +1416,7 @@ function openLateSheet(f, by) {
     <p class="muted small" style="margin:0 0 12px">${esc(T('lateMsg'))}</p>
     <div class="fl"><label for="lateTx">سبب التأخير</label><textarea id="lateTx" rows="3" maxlength="300" placeholder="مثلاً: زحمة على طريق الملك فهد"></textarea></div>
     <div class="quickr">${T('lateReasons').split(/[،,]/).map(x => x.trim()).filter(Boolean).map(x => `<button type="button" class="qr">${x}</button>`).join('')}</div>
+    <label class="latepic" id="latePicL"><input type="file" accept="image/*" id="latePic" hidden><span id="latePicV">${ic('camera', 18)} أضف صورة (اختياري)</span></label>
     <button class="btn primary" id="lateSend" type="button" style="width:100%;margin-top:12px">${ic('send', 16)} إرسال السبب للمدير</button>
     <div class="row-btns" style="margin-top:10px">
      ${phone ? `<a class="btn ghost" href="tel:${phone}">${ic('phone', 16)} اتصل بالمدير</a><a class="btn ghost" href="https://wa.me/${phone.replace(/^\+/, '').replace(/^0/, '966')}" target="_blank" rel="noopener">${ic('chat', 16)} واتساب المدير</a>` : ''}
@@ -1424,10 +1427,19 @@ function openLateSheet(f, by) {
   $('shClose').onclick = closeSheet; sc.onclick = closeSheet;
   const tx = $('lateTx');
   inner.querySelectorAll('.qr').forEach(b => b.onclick = () => { tx.value = b.textContent; tx.focus(); });
+  let lpFull = null, lpThumb = null;
+  $('latePic').onchange = async ev => {
+    const fl = ev.target.files && ev.target.files[0]; if (!fl) return;
+    const url = URL.createObjectURL(fl);
+    try { lpFull = await shrinkData(url, 1280); lpThumb = await shrinkData(url, 240); $('latePicV').innerHTML = `<img src="${lpThumb}" alt=""> <span>الصورة جاهزة · دوس لتغييرها</span> <button type="button" class="lpx" id="lpX" aria-label="شيل الصورة">${ic('x', 14)}</button>`; $('lpX').onclick = e2 => { e2.preventDefault(); lpFull = lpThumb = null; $('latePic').value = ''; $('latePicV').innerHTML = `${ic('camera', 18)} أضف صورة (اختياري)`; }; }
+    catch (e) { $('lateErr').textContent = 'مش قادر أقرا الصورة، جرّب صورة تانية'; } finally { URL.revokeObjectURL(url); }
+  };
   $('lateSend').onclick = async () => {
     const t = tx.value.trim(); if (t.length < 2) { $('lateErr').textContent = 'اكتب السبب الأول'; tx.focus(); return; }
-    try { await updateDoc(doc(db, 'days', me.uid + '_' + todayIdx()), { [f === 'in' ? 'late_note' : 'late_note2']: { text: t, at: serverTimestamp() } }); closeSheet(); toast('ok', 'وصل سبب التأخير للمدير', t, 'تسجيلك'); }
-    catch (e) { $('lateErr').textContent = errWhy(e); }
+    const sb = $('lateSend'); sb.disabled = true;
+    try { const note = { text: t, at: serverTimestamp() }; if (lpFull) { const m = await addDoc(collection(db, 'media'), { uid: me.uid, kind: 'site', data: lpFull, at: serverTimestamp() }); mediaCache[m.id] = Promise.resolve(lpFull); note.media = m.id; note.thumb = lpThumb; }
+      await updateDoc(doc(db, 'days', me.uid + '_' + todayIdx()), { [f === 'in' ? 'late_note' : 'late_note2']: note }); closeSheet(); toast('ok', 'وصل سبب التأخير للمدير', t, 'تسجيلك'); }
+    catch (e) { sb.disabled = false; $('lateErr').textContent = errWhy(e); }
   };
   $('lateChat').onclick = () => { const t = tx.value.trim(); closeSheet(); openTab('vChat'); setTimeout(() => { const ta = $('chatIn'); if (ta) { ta.value = `اتأخرت ${dur(by)} عن ${FL[f]}` + (t ? ' بسبب ' + t : ' بسبب '); ta.oninput(); ta.focus(); } }, 350); };
   setTimeout(() => tx.focus(), 450);
@@ -1551,7 +1563,10 @@ function checkEmpReminders() {
   // الحضور: من أول دقيقة، وبعد ٥ دقائق، وعند نهاية فترة السماح
   rule('in1', noIn && n >= P.start + 1 && n < P.start + 5, () => alertBoth('warn', 'لازم تسجّل حضورك', 'الدوام بدأ الساعة ' + tm(P.start) + ' · فترة السماح ' + ar(G) + ' دقائق', 'تنبيه لك', 'rem-in'));
   rule('in5', noIn && n >= P.start + 5 && n < P.start + G, () => alertBoth('bad', 'سجّل حضورك الآن', 'باقي ' + ar(Math.max(1, Math.ceil(P.start + G - n))) + ' دقائق على نهاية فترة السماح', 'تنبيه لك', 'rem-in'));
-  rule('inG', noIn && n >= P.start + G && n < P.start + G + 30, () => alertBoth('bad', 'انتهت فترة السماح', 'سجّل حضورك فوراً، هيتحسب تأخير', 'تنبيه لك', 'rem-in'));
+  rule('inG', noIn && n >= P.start + G && n < P.start + G + 15, () => alertBoth('bad', 'انتهت فترة السماح', 'سجّل حضورك فوراً، هيتحسب تأخير', 'تنبيه لك', 'rem-in'));
+  // متأخر ولسه ما سجّلش: تذكير كل ربع ساعة لحد نهاية الدوام
+  if (noIn && n >= P.start + G + 15 && n < (P.two ? P.b1 : P.end)) { const q = Math.floor((n - P.start - G) / 15); rule('late' + q, true, () => alertBoth('bad', 'إنت متأخر · سجّل حضورك', 'متأخر ' + dur(n - P.start) + ' عن الدوام (من ' + tm(P.start) + ') · سجّل أول ما توصل', 'تنبيه لك', 'rem-in')); }
+  if (P.two && r && r.out1 != null && r.in2 == null && n >= P.b2 + brG() + 15 && n < P.end) { const q = Math.floor((n - P.b2 - brG()) / 15); rule('lateb' + q, true, () => alertBoth('bad', 'إنت متأخر · سجّل عودتك', 'الفترة التانية بدأت الساعة ' + tm(P.b2), 'تنبيه لك', 'rem-r')); }
   if (P.two) {
     const inShift1 = r && r.in != null && (r.out1 == null || r.m.out1 === 'auto');
     rule('b-5', inShift1 && n >= P.b1 - 5 && n < P.b1, () => alertBoth('info', 'البريك بعد ٥ دقائق', 'خروج البريك هيتسجل تلقائياً الساعة ' + tm(P.b1), 'تنبيه لك', 'rem-b'));
@@ -2003,7 +2018,7 @@ function paintChat(jump) {
   msgs.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who${canSee() && !m.owner && empById(m.uid) ? ' whob" role="button" tabindex="0" data-whouid="' + esc(m.uid) + '" title="عرض ملف ' + esc(m.name || '') : ''}" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
   });
   box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
@@ -2151,7 +2166,7 @@ const SF = {
   present: e => { const r = getRec(e, todayKey()); return !!(r && (r.in != null || r.in2 != null)); },
   late: e => SF.notyet(e) || SF.lateIn(e),
   lateIn: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && ((r.in != null && lvlOf('in', r.in, P) !== 'g') || (P.two && r.in2 != null && lvlOf('in2', r.in2, P) !== 'g'))); },
-  early: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && r.in != null && r.in < P.start); },
+  early: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && r.in != null && r.in <= P.start + grace()); },
   absent: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start) return false; if (r && (r.in != null || r.in2 != null)) return false; return nowMin() > P.end; },
   notyet: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start || (r && (r.in != null || r.in2 != null))) return false; const n = nowMin(); return n > P.start + grace() && n <= P.end; },
   leave: e => !!onLeave(e, todayKey()),
@@ -2172,9 +2187,10 @@ function renderOwnerInner() {
   const liveCount = Object.values(lives).filter(fresh).length;
   v.innerHTML = `
   <div class="hello reveal"><b>${esc(isViewer ? T('viewerHello') : T('ownerHello'))}</b><span>${isViewer ? 'حساب مشاهدة فقط · ' : ''}${esc(COMPANY)}</span></div>
-  ${noticeHTML()}
-  ${'Notification' in window && Notification.permission !== 'granted' ? `<button class="notifask" type="button" id="ownNotif">${ic('bell', 20)}<span><b>فعّل الإشعارات على الجوال</b><small>عشان يوصلك الحضور والتأخير واللايف والشات والتطبيق في الخلفية</small></span></button>` : ''}
+  ${stFilter !== 'all' ? '' : noticeHTML()}
+  ${stFilter === 'all' && 'Notification' in window && Notification.permission !== 'granted' ? `<button class="notifask" type="button" id="ownNotif">${ic('bell', 20)}<span><b>فعّل الإشعارات على الجوال</b><small>عشان يوصلك الحضور والتأخير واللايف والشات والتطبيق في الخلفية</small></span></button>` : ''}
   <div class="okpis reveal">
+   <button type="button" class="okpi all ${stFilter === 'all' ? 'sel' : ''}" data-sf="all"><div class="l">${ic('users', 14)}بدون فلتر</div><b class="num" data-c="${emps.filter(inDept).filter(e => e.active).length}">٠</b></button>
    <button type="button" class="okpi g ${stFilter === 'present' ? 'sel' : ''}" data-sf="present"><div class="l">${ic('login', 14)}حاضر</div><b class="num" data-c="${act.filter(e => SF.present(e)).length}">٠</b></button>
    <button type="button" class="okpi r ${stFilter === 'absent' ? 'sel' : ''}" data-sf="absent"><div class="l">${ic('alert', 14)}غايب</div><b class="num" data-c="${act.filter(e => SF.absent(e)).length}">٠</b></button>
    <button type="button" class="okpi a ${stFilter === 'late' ? 'sel' : ''}" data-sf="late"><div class="l">${ic('clock', 14)}متأخر</div><b class="num" data-c="${act.filter(e => SF.late(e)).length}">٠</b></button>
@@ -2182,15 +2198,15 @@ function renderOwnerInner() {
    <button type="button" class="okpi l ${stFilter === 'leave' ? 'sel' : ''}" data-sf="leave"><div class="l">${ic('calendar', 14)}في إجازة</div><b class="num" data-c="${act.filter(e => SF.leave(e)).length}">٠</b></button>
    <button type="button" class="okpi i ${stFilter === 'live' ? 'sel' : ''}" data-sf="live"><div class="l">${ic('live', 14)}لايف لوكيشن</div><b class="num" data-c="${act.filter(e => SF.live(e)).length}">٠</b></button>
   </div>
-  <div class="card reveal" style="margin-bottom:16px;animation-delay:.06s"><h2>دوام اليوم <span class="muted small" style="font-family:var(--f-body)">${DAYS[fromKey(key).getDay()]} · فترة السماح ${ar(grace())} د</span></h2>${bandHTML(P)}</div>
+  <div class="card reveal" style="margin-bottom:16px;animation-delay:.06s" ${stFilter !== 'all' ? 'hidden' : ''}><h2>دوام اليوم <span class="muted small" style="font-family:var(--f-body)">${DAYS[fromKey(key).getDay()]} · فترة السماح ${ar(grace())} د</span></h2>${bandHTML(P)}</div>
   <div class="depts reveal" role="group" aria-label="الأقسام">
    <button data-dept="all" aria-pressed="${deptFilter === 'all'}">الكل <i>${ar(emps.filter(e => e.active).length)}</i></button>
    ${deptList().map(d => `<button data-dept="${d}" aria-pressed="${deptFilter === d}">${d} <i>${ar(dCount(d))}</i></button>`).join('')}
   </div>
-  <div class="grid two">
+  <div class="grid two ${stFilter !== 'all' ? 'filtering' : ''}">
    <section class="card reveal" style="animation-delay:.1s">
     <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
-    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (اللي دوامهم خلص ومسجّلوش)', late: 'المتأخرين واللي دوامهم بدأ ولسه ما وصلوش', early: 'اللي حضروا بدري', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
+    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (اللي دوامهم خلص ومسجّلوش)', late: 'المتأخرين واللي دوامهم بدأ ولسه ما وصلوش', early: 'اللي حضروا قبل نهاية فترة السماح (مثلاً لحد ' + tm((P.start || 540) + grace()) + ')', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
@@ -2207,7 +2223,7 @@ function renderOwnerInner() {
      <div class="err" id="addErr"></div>
     </form>`}
    </section>
-   <section class="card reveal" style="animation-delay:.16s">
+   <section class="card reveal feedcard" style="animation-delay:.16s">
     <h2>الإشعارات <span style="color:var(--gold)">${ic('bell', 18)}</span></h2>
     <div class="feed" id="feed"></div>
     <div class="row-btns">${notif === 'default' ? `<button class="btn ghost" id="notifBtn">${ic('bell', 14)} تفعيل إشعارات الجوال</button>` : notif === 'granted' ? `<span class="muted small">${ic('check', 14)} إشعارات الجوال مفعّلة</span>` : notif === 'denied' ? `<span class="muted small">الإشعارات مرفوضة، فعّلها من إعدادات المتصفح</span>` : ''}</div>
@@ -2217,7 +2233,7 @@ function renderOwnerInner() {
   requestAnimationFrame(() => requestAnimationFrame(() => v.querySelectorAll('[data-w]').forEach(d => d.style.transform = `scaleX(${d.dataset.w / 100})`)));
   renderFeed(false); updateBands();
   $('empList').onclick = e => { const b = e.target.closest('[data-emp]'); if (b) openSheet(b.dataset.emp); };
-  v.querySelectorAll('[data-sf]').forEach(b => b.onclick = () => { stFilter = stFilter === b.dataset.sf ? 'all' : b.dataset.sf; renderOwner(); setTimeout(() => { const el = $('empList'); el && el.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); }, 80); });
+  v.querySelectorAll('[data-sf]').forEach(b => b.onclick = () => { stFilter = b.dataset.sf === 'all' || stFilter === b.dataset.sf ? 'all' : b.dataset.sf; renderOwner(); setTimeout(() => { const el = $('empList'); el && el.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); }, 80); });
   if ($('sfClear')) $('sfClear').onclick = () => { stFilter = 'all'; renderOwner(); };
   v.querySelector('.depts').onclick = e => { const b = e.target.closest('[data-dept]'); if (!b) return; deptFilter = b.dataset.dept; renderOwner(); };
   const nb = $('notifBtn'); if (nb) nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) { } renderOwner(); };
