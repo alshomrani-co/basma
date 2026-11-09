@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=26';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=28';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -37,7 +37,7 @@ const ALL = ['in', 'out1', 'in2', 'out'];
 const FMAP = { in: 'p1', out1: 'p2', in2: 'p3', out: 'p4' };
 const FL = { in: 'الحضور', out1: 'خروج البريك', in2: 'العودة', out: 'الانصراف' };
 const ACT = { in: 'تسجيل حضور', out1: 'خروج للبريك', in2: 'عودة من البريك', out: 'تسجيل انصراف' };
-const STL = { leave: 'في إجازة', present: 'حاضر', late: 'متأخر', half: 'نصف يوم', absent: 'غائب', missing: 'لم يسجّل', pending: 'بانتظار الحضور', off: 'إجازة', future: '', none: '', break: 'في البريك', done: 'انصرف', inactive: 'موقوف' };
+const STL = { leave: 'في إجازة', present: 'حاضر', late: 'متأخر', half: 'نصف يوم', absent: 'غائب', missing: 'متأخر · لسه ما وصلش', pending: 'لسه دوامه ما بدأش', off: 'إجازة', future: '', none: '', break: 'في البريك', done: 'انصرف', inactive: 'موقوف' };
 const I = {
   check: "M5 12l5 5L20 7",
   face: "M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 10h.01M15 10h.01M9.5 15a3.5 3.5 0 0 0 5 0",
@@ -256,7 +256,7 @@ function status(emp, key) {
   const P = planKey(key, emp);
   if (P.off) return 'off';
   const r = getRec(emp, key), isT = isToday(key), n = nowMin();
-  if (!r) { if (isT) return n > P.start + grace() ? 'missing' : 'pending'; return 'absent'; }
+  if (!r) { if (isT) return n <= P.start + grace() ? 'pending' : n <= P.end ? 'missing' : 'absent'; return 'absent'; }
   if (r.in == null) return 'half';
   if (P.two && !isT && r.in2 == null) return 'half';
   return isLate(r, P) ? 'late' : 'present';
@@ -264,8 +264,9 @@ function status(emp, key) {
 function liveStatus(emp) {
   if (!emp.active) return 'inactive';
   const key = todayKey(), st = status(emp, key);
-  if (['off', 'missing', 'pending', 'none'].includes(st)) return st === 'none' ? 'pending' : st;
+  if (['off', 'missing', 'pending', 'none', 'leave', 'future'].includes(st)) return st === 'none' || st === 'future' ? 'pending' : st;
   const r = getRec(emp, key), P = todayPlan(emp);
+  if (!r) return st;
   if (r.out != null) return 'done';
   if (P.two && r.out1 != null && r.in2 == null) return 'break';
   return st;
@@ -301,8 +302,8 @@ function stats(emp, from, to) {
     const k = keyOf(d), s = status(emp, k);
     if (s === 'present' || s === 'late' || s === 'half') { o.att++; o.hrs += worked(getRec(emp, k), k, emp); }
     if (s === 'late') o.late++; if (s === 'half') o.half++;
-    if (s === 'absent' || s === 'missing') o.abs++;
-    if (['present', 'late', 'half', 'absent', 'missing'].includes(s)) o.days++;
+    if (s === 'absent') o.abs++;
+    if (['present', 'late', 'half', 'absent'].includes(s)) o.days++;
   }
   o.pct = o.days ? Math.round(o.att / o.days * 100) : 0; o.hrs = Math.round(o.hrs / 60); return o;
 }
@@ -1044,10 +1045,11 @@ function dayStatus(e, k) {
   }
   if (onLeave(e, k)) return { s: 'leave', P };
   if (P.off) return { s: 'off', P };
-  if (isToday(k) && nowMin() < P.start + grace()) return { s: 'wait', P };
+  if (isToday(k) && nowMin() <= P.start + grace()) return { s: 'wait', P };
+  if (isToday(k) && nowMin() <= P.end) return { s: 'notyet', P };
   return { s: 'absent', P };
 }
-const DS = { leave: ['في إجازة', 'c-leave'], ok: ['في الموعد', 'c-present'], early: ['بدري', 'c-present'], late: ['متأخر', 'c-late'], vlate: ['تأخير كبير', 'c-absent'], absent: ['غائب', 'c-absent'], off: ['إجازة', 'c-off'], wait: ['لسه', 'c-off'], extra: ['حضر في إجازة', 'c-break'] };
+const DS = { leave: ['في إجازة', 'c-leave'], ok: ['في الموعد', 'c-present'], early: ['بدري', 'c-present'], late: ['متأخر', 'c-late'], vlate: ['تأخير كبير', 'c-absent'], absent: ['غائب', 'c-absent'], off: ['إجازة', 'c-off'], wait: ['دوامه لسه ما بدأش', 'c-off'], notyet: ['متأخر · لسه ما وصلش', 'c-late'], extra: ['حضر في إجازة', 'c-break'] };
 function renderWatch() {
   show('vWatch'); const v = $('vWatch'), k = wDay || todayKey();
   v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} متابعة الحضور والغياب</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
@@ -1061,8 +1063,8 @@ function paintWatch() {
   const el = $('wList'); if (!el) return; const k = (($('wDayIn') && $('wDayIn').value) || todayKey());
   const list = allEmps().filter(e => e.active).map(e => ({ e, d: dayStatus(e, k) })).filter(x => x.d.s !== 'na');
   const c = s => list.filter(x => s.includes(x.d.s)).length;
-  $('wK').innerHTML = [['حاضر', c(['ok', 'early', 'late', 'vlate', 'extra']), 'g'], ['بدري', c(['early']), 'g'], ['متأخر', c(['late', 'vlate']), 'y'], ['غائب', c(['absent']), 'r']].map(([l, n, t]) => `<div class="wk wk-${t}"><b class="num">${ar(n)}</b><small>${l}</small></div>`).join('');
-  const order = { leave: 7, absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
+  $('wK').innerHTML = [['حاضر', c(['ok', 'early', 'late', 'vlate', 'extra']), 'g'], ['بدري', c(['early']), 'g'], ['متأخر', c(['late', 'vlate', 'notyet']), 'y'], ['غائب', c(['absent']), 'r']].map(([l, n, t]) => `<div class="wk wk-${t}"><b class="num">${ar(n)}</b><small>${l}</small></div>`).join('');
+  const order = { leave: 7, notyet: 1, absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
   el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
     const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '';
     return `<div class="wrow"><div class="av">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span></b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}</div></div>`;
@@ -1104,7 +1106,7 @@ async function exportXlsx(fromK, toK, label, fname) {
         const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
         if (!P.off) wd++;
         const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '']); } continue; }
-        if (!has) { if (P.off || (isToday(k) && nowMin() < P.start + grace())) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
+        if (!has) { if (P.off || (isToday(k) && nowMin() <= P.end)) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
         pr++; const w = worked(r, k, e); mins += w;
         let st = 'حضر في إجازة', late = 0;
         if (!P.off) {
@@ -1153,9 +1155,9 @@ function shiftExplain(e, k) {
   const P = planKey(k, e), r = getRec(e, k), lv = onLeave(e, k), isT = isToday(k), n = nowMin();
   if (lv) return 'في إجازة ' + (LEAVE_T[lv.type] || '') + ' · العودة ' + dFmt.format(fromKey(lv.back));
   if (P.off) return 'يوم إجازة (مفيش دوام)';
-  const a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n < P.start + grace() ? 'لسه ما جاش' : 'ما سجّلش حضور ✗');
+  const a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= P.end ? 'متأخر · لسه ما وصلش (الدوام لحد ' + tm(P.end) + ')' : 'غايب · ما سجّلش حضور ✗');
   if (!P.two) return a + (r && r.out != null ? ' · انصرف ' + tm(r.out) + (r.m.out === 'auto' ? ' (تلقائي)' : '') : '');
-  const b = r && r.in2 != null ? 'رجع ' + tm(r.in2) + (lvlOf('in2', r.in2, P) === 'g' ? ' ✓' : ' (متأخر ' + dur(r.in2 - P.b2) + ')') : (isT && n < P.b2 + brG() ? (n >= P.b1 ? 'في البريك دلوقتي' : 'لسه ما بدأتش') : 'ما رجعش بعد البريك ✗');
+  const b = r && r.in2 != null ? 'رجع ' + tm(r.in2) + (lvlOf('in2', r.in2, P) === 'g' ? ' ✓' : ' (متأخر ' + dur(r.in2 - P.b2) + ')') : (isT && n < P.b2 + brG() ? (n >= P.b1 ? 'في البريك دلوقتي' : 'لسه ما بدأتش') : isT && n <= P.end ? 'لسه ما رجعش (الفترة لحد ' + tm(P.end) + ')' : 'ما رجعش بعد البريك ✗');
   return 'الفترة الأولى: ' + a + ' · الفترة التانية: ' + b;
 }
 function profInfo(emp) {
@@ -2147,12 +2149,18 @@ function renderFeed(isNew) {
 const inDept = e => deptFilter === 'all' || e.dept === deptFilter;
 const SF = {
   present: e => { const r = getRec(e, todayKey()); return !!(r && (r.in != null || r.in2 != null)); },
-  late: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && ((r.in != null && lvlOf('in', r.in, P) !== 'g') || (P.two && r.in2 != null && lvlOf('in2', r.in2, P) !== 'g'))); },
+  late: e => SF.notyet(e) || SF.lateIn(e),
+  lateIn: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && ((r.in != null && lvlOf('in', r.in, P) !== 'g') || (P.two && r.in2 != null && lvlOf('in2', r.in2, P) !== 'g'))); },
   early: e => { const r = getRec(e, todayKey()), P = todayPlan(e); return !!(r && !P.off && r.in != null && r.in < P.start); },
-  absent: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start) return false; if (r && r.in != null) return P.two && r.in2 == null && nowMin() > P.b2 + brG(); return nowMin() > P.start + grace(); },
-  leave: e => !!onLeave(e, todayKey())
+  absent: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start) return false; if (r && (r.in != null || r.in2 != null)) return false; return nowMin() > P.end; },
+  notyet: e => { const k = todayKey(), P = todayPlan(e), r = getRec(e, k); if (P.off || onLeave(e, k) || k < e.start || (r && (r.in != null || r.in2 != null))) return false; const n = nowMin(); return n > P.start + grace() && n <= P.end; },
+  leave: e => !!onLeave(e, todayKey()),
+  live: e => online(lives[e.id])
 };
 function renderOwner() {
+  try { renderOwnerInner(); } catch (e) { console.error(e); show('vOwn'); $('vOwn').innerHTML = `<section class="card"><h2>حصلت مشكلة في عرض الرئيسية</h2><p class="muted small">صوّر الرسالة دي وابعتها: ${esc(String(e && e.message || e))}</p></section>`; }
+}
+function renderOwnerInner() {
   show('vOwn');
   const v = $('vOwn'); const key = todayKey(); const P = todayPlan();
   const list = emps.filter(inDept).filter(e => stFilter === 'all' || (e.active && SF[stFilter](e))).sort((a, b) => (b.active - a.active) || String(a.dept).localeCompare(String(b.dept), 'ar') || String(a.name).localeCompare(String(b.name), 'ar'));
@@ -2168,11 +2176,11 @@ function renderOwner() {
   ${'Notification' in window && Notification.permission !== 'granted' ? `<button class="notifask" type="button" id="ownNotif">${ic('bell', 20)}<span><b>فعّل الإشعارات على الجوال</b><small>عشان يوصلك الحضور والتأخير واللايف والشات والتطبيق في الخلفية</small></span></button>` : ''}
   <div class="okpis reveal">
    <button type="button" class="okpi g ${stFilter === 'present' ? 'sel' : ''}" data-sf="present"><div class="l">${ic('login', 14)}حاضر</div><b class="num" data-c="${act.filter(e => SF.present(e)).length}">٠</b></button>
-   <button type="button" class="okpi r ${stFilter === 'absent' ? 'sel' : ''}" data-sf="absent"><div class="l">${ic('alert', 14)}غايب / لم يسجّل</div><b class="num" data-c="${act.filter(e => SF.absent(e)).length}">٠</b></button>
+   <button type="button" class="okpi r ${stFilter === 'absent' ? 'sel' : ''}" data-sf="absent"><div class="l">${ic('alert', 14)}غايب</div><b class="num" data-c="${act.filter(e => SF.absent(e)).length}">٠</b></button>
    <button type="button" class="okpi a ${stFilter === 'late' ? 'sel' : ''}" data-sf="late"><div class="l">${ic('clock', 14)}متأخر</div><b class="num" data-c="${act.filter(e => SF.late(e)).length}">٠</b></button>
    <button type="button" class="okpi e ${stFilter === 'early' ? 'sel' : ''}" data-sf="early"><div class="l">${ic('check', 14)}حضر بدري</div><b class="num" data-c="${act.filter(e => SF.early(e)).length}">٠</b></button>
    <button type="button" class="okpi l ${stFilter === 'leave' ? 'sel' : ''}" data-sf="leave"><div class="l">${ic('calendar', 14)}في إجازة</div><b class="num" data-c="${act.filter(e => SF.leave(e)).length}">٠</b></button>
-   <div class="okpi i"><div class="l">${ic('live', 14)}موقع مباشر</div><b class="num" data-c="${liveCount}">٠</b></div>
+   <button type="button" class="okpi i ${stFilter === 'live' ? 'sel' : ''}" data-sf="live"><div class="l">${ic('live', 14)}لايف لوكيشن</div><b class="num" data-c="${act.filter(e => SF.live(e)).length}">٠</b></button>
   </div>
   <div class="card reveal" style="margin-bottom:16px;animation-delay:.06s"><h2>دوام اليوم <span class="muted small" style="font-family:var(--f-body)">${DAYS[fromKey(key).getDay()]} · فترة السماح ${ar(grace())} د</span></h2>${bandHTML(P)}</div>
   <div class="depts reveal" role="group" aria-label="الأقسام">
@@ -2182,7 +2190,7 @@ function renderOwner() {
   <div class="grid two">
    <section class="card reveal" style="animation-delay:.1s">
     <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
-    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين واللي لسه ما سجّلوش', late: 'المتأخرين', early: 'اللي حضروا بدري', leave: 'اللي في إجازة' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
+    ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (اللي دوامهم خلص ومسجّلوش)', late: 'المتأخرين واللي دوامهم بدأ ولسه ما وصلوش', early: 'اللي حضروا بدري', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
@@ -2255,7 +2263,7 @@ function checkOwnerAlerts() {
       if (r && r.m.out === 'auto' && n >= P.end && n < P.end + 60 && !notified.has(ko)) { notified.add(ko); alertBoth('info', e.name + ' · انصراف', 'اتسجّل تلقائياً الساعة ' + tm(P.end), 'إشعار للمالك'); }
     }
     const k1 = key + e.id + 'miss-in', k2 = key + e.id + 'miss-back';
-    if (!r && n >= P.start + G && n < P.W.in[1] && !notified.has(k1)) { notified.add(k1); alertBoth('bad', e.name + ' لم يسجّل حضور', (e.dept ? 'قسم ' + e.dept + ' · ' : '') + 'تجاوز ' + tm(P.start + G), 'إشعار للمالك'); }
+    if (!r && n >= P.start + G && n < P.W.in[1] && !notified.has(k1)) { notified.add(k1); alertBoth('warn', e.name + ' متأخر · لسه ما سجّلش حضور', (e.dept ? 'قسم ' + e.dept + ' · ' : '') + 'تجاوز ' + tm(P.start + G), 'إشعار للمالك'); }
     if (P.two && r && r.out1 != null && r.in2 == null && n >= P.b2 + brG() && n < P.W.in2[1] && !notified.has(k2)) { notified.add(k2); alertBoth('warn', e.name + ' لم يعد من البريك', 'تجاوز ' + tm(P.b2 + brG()), 'إشعار للمالك'); }
   });
   // تذكير برجوع الإجازة (قبلها بيوم)
