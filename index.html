@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=30">
+<link rel="manifest" href="manifest.json?v=33">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -838,6 +838,47 @@ button.okpi.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
  .emp .av{width:38px;height:38px}
 }
 
+
+.tw{display:inline-flex;flex-direction:column;align-items:center;gap:2px}
+.tl{font-size:11px;color:var(--muted);font-weight:600}
+.tl.night{color:var(--bad)}
+.tl.night::after{content:" ⚠ فجر"}
+
+/* v32: المتابعة والتقارير والكاميرا */
+.wseg{margin-top:4px}.wseg .onl{margin-inline-start:4px}
+button.wrow{width:100%;text-align:right;font:inherit;color:inherit;background:none;border:0;border-bottom:1px solid var(--line);cursor:pointer;padding:10px 4px}
+button.wrow:active{background:var(--surface2)}
+.wrow .sexp{display:block;margin-top:3px}
+.repseg{margin-top:4px}
+.reptot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0 10px}
+.wk-l b{color:#6a5acd}
+.reptbl{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.reptbl .rr{display:grid;grid-template-columns:2.2fr repeat(5,1fr);gap:4px;align-items:center;padding:9px 10px;border-top:1px solid var(--line);font-size:13px;text-align:center}
+.reptbl .rr:nth-child(odd){background:var(--surface2)}
+.reptbl .rh{border-top:0;background:#7a1216!important;color:#fff;font-weight:600;font-size:12px}
+.reptbl .rr span:first-child{text-align:right;display:flex;flex-direction:column}
+.reptbl .rr small{color:var(--muted);font-size:11px}
+.reptbl .g{color:#23763a;font-weight:600}.reptbl .r{color:#c0262b;font-weight:700}.reptbl .y{color:#8a6500;font-weight:600}
+.camx{position:fixed;inset:0;z-index:200;background:#000;display:flex;flex-direction:column}
+.camv{position:relative;flex:1;overflow:hidden}
+.camv video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.camx.front .camv video{transform:scaleX(-1)}
+#cxB{opacity:0;pointer-events:none}
+.camx.beauty #cxV{filter:brightness(1.06) contrast(1.04) saturate(1.1)}
+.camx.beauty #cxB{opacity:.38;filter:blur(5px) brightness(1.1)}
+.camtop{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:12px;right:12px;display:flex;justify-content:space-between;z-index:2}
+.cambar{display:flex;align-items:center;justify-content:space-around;padding:18px 20px calc(22px + env(safe-area-inset-bottom,0px));background:#000}
+.camb{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;gap:6px;border:0}
+.camb.wide{width:auto;padding:0 16px;border-radius:24px;font-weight:600;font-size:13px}
+.camb.on{background:#fff;color:#c81e23}
+.camshot{width:74px;height:74px;border-radius:50%;border:4px solid #fff;background:transparent;padding:5px}
+.camshot i{display:block;width:100%;height:100%;border-radius:50%;background:#fff}
+.camshot:active i{transform:scale(.9)}
+.camx.flash::after{content:"";position:absolute;inset:0;background:#fff;animation:camfl .3s ease-out forwards;z-index:5}
+@keyframes camfl{from{opacity:.9}to{opacity:0}}
+@media (max-width:600px){.reptbl .rr{grid-template-columns:1.8fr repeat(5,1fr);font-size:12px;padding:8px 6px}}
+.camtag{display:flex;align-items:center;gap:6px;padding:0 14px;height:40px;border-radius:20px;background:rgba(0,0,0,.45);color:#fff;font-size:13px;font-weight:600}
+.camb.ghostb{background:none}
 </style>
 </head>
 <body>
@@ -907,6 +948,6 @@ button.okpi.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=30"></script>
+<script type="module" src="app.js?v=33"></script>
 </body>
 </html>

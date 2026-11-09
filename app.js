@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=30';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=33';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -109,6 +109,7 @@ const I = {
   fingerprint2: "M12 11v3a8 8 0 0 1-1.5 4.7M8 7.5A5 5 0 0 1 17 10v2M6 12v-2a6 6 0 0 1 .5-2.4M16 15.5a12 12 0 0 1-.8 3.5M9 13.5V11a3 3 0 0 1 6 0v1",
   house2: "M3 11l9-8 9 8M5 9v12h14V9M10 21v-6h4v6",
   pin2: "M12 21s-6-6.1-6-11a6 6 0 0 1 12 0c0 4.9-6 11-6 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+  refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
   clip: "M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3L18 10a3 3 0 0 0-6-6l-6.5 6.5a4.5 4.5 0 0 0 9 9L21 13",
   file: "M14 3v4a1 1 0 0 0 1 1h4M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2zM9 13h6M9 17h4",
   download: "M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12",
@@ -175,7 +176,8 @@ const notified = (() => {
   return { has: x => set.has(x), add: x => { set.add(x); try { localStorage.setItem(k, JSON.stringify([...set])); } catch (e) { } } };
 })();
 
-const empById = id => emps.find(e => e.id === id) || (meEmp && meEmp.id === id ? meEmp : null);
+const name2 = n => String(n || '').trim().split(/\s+/).slice(0, 2).join(' ');
+const empById = id => emps.find(e => e.id === id) || (typeof wEmps !== 'undefined' && wEmps.find(e => e.id === id)) || (meEmp && meEmp.id === id ? meEmp : null);
 const getRec = (emp, key) => autoRec((recs[emp.id] && recs[emp.id][key]) || null, key, emp);
 const nset = (k, d) => Number.isFinite(+settings[k]) && settings[k] !== '' && settings[k] != null ? +settings[k] : d;
 const grace = () => nset('grace', DEF_GRACE);          // الحضور: أخضر لحد كده
@@ -416,12 +418,12 @@ function alertBoth(kind, title, body, who, tag, go) {
 function goTo(target) {
   if (!target || !me) return;
   const [tab, id] = String(target).split(':');
-  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat', 'vMe', ...(isWatch ? ['vWatch'] : [])];
+  const ok = isOwner ? ['vOwn', 'vMap', 'vChat', 'vUi', 'vSet'] : isViewer ? ['vOwn', 'vMap', 'vChat'] : ['vEmp', 'vLive', 'vChat', 'vMe', ...(isWatch ? ['vWatch', 'vMap'] : [])];
   if (!ok.includes(tab)) return;
   if (tab === 'vMap' && id === 'visits') { mapTab = 'visits'; if (view === 'vMap') renderMap(); else openTab('vMap'); return; }
   if (tab === 'vMap' && mapTab !== 'live') { mapTab = 'live'; if (view === 'vMap') renderMap(); }
   if (view !== tab) openTab(tab);
-  if (tab === 'vMap' && id && canSee()) setTimeout(() => openLiveSheet(id), 400);
+  if (tab === 'vMap' && id && (canSee() || isWatch)) setTimeout(() => openLiveSheet(id), 400);
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.go) goTo(e.data.go); });
 let pendingGo = (location.hash || '').replace('#go=', '').replace('#', '') || null;
@@ -458,21 +460,23 @@ function tabIntro() {
   if (n < 5) { const tip = document.createElement('div'); tip.className = 'tbtip'; tip.textContent = isOwner ? 'من هنا: الرئيسية، الخريطة، الشات، والإعدادات' : isViewer ? 'من هنا: الحضور، الخريطة، والشات' : 'من هنا: البصمة، موقعي المباشر، والشات'; tb.querySelector('.tb-in').appendChild(tip); setTimeout(() => { tip.classList.add('out'); setTimeout(() => tip.remove(), 500); }, 6000); }
   setTimeout(() => tb.classList.remove('intro'), 5500);
 }
+const isWatchOnly = () => isWatch && !canSee();
+const curTab = () => (view === 'vMap' && isWatchOnly()) ? 'vWatch' : view;
 function paintTabs() {
   const tabs = isOwner ? TABS_OWN : isViewer ? TABS_VIEW : (isWatch ? [TABS_EMP[0], ['vWatch', 'eye', T('tab_vWatch')], ...TABS_EMP.slice(1)] : TABS_EMP), tb = $('tabbar');
   const extra = v => (v === 'vChat' && unread() ? `<i class="badge">${ar(Math.min(unread(), 99))}</i>` : '') + (v === 'vLive' && liveOn ? '<i class="livedot"></i>' : '');
   const btns = tb.querySelectorAll('[data-tab]');
   // تحديث في مكانه عشان الحركة ما تتعادش مع كل رسالة جديدة
   if (btns.length === tabs.length && [...btns].every((b, i) => b.dataset.tab === tabs[i][0] && b.querySelector('span').textContent === (tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite') ? T('tab_vLiveSup') : tabs[i][2]) && b.dataset.ic === ((tabs[i][0] === 'vLive' && siteRule(meEmp, 'liveSite')) ? ((UI.icons && UI.icons.vLiveSup) || 'map') : tabs[i][1]))) {
-    btns.forEach((b, i) => { const v = tabs[i][0]; b.setAttribute('aria-current', view === v ? 'page' : 'false'); b.querySelectorAll('.badge,.livedot').forEach(x => x.remove()); b.insertAdjacentHTML('beforeend', extra(v)); });
+    btns.forEach((b, i) => { const v = tabs[i][0]; b.setAttribute('aria-current', curTab() === v ? 'page' : 'false'); b.querySelectorAll('.badge,.livedot').forEach(x => x.remove()); b.insertAdjacentHTML('beforeend', extra(v)); });
   } else {
-    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && siteRule(meEmp, 'liveSite') ? [v, (UI.icons && UI.icons.vLiveSup) || 'map', T('tab_vLiveSup')] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" data-ic="${icn}" aria-current="${view === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
+    tb.innerHTML = `<div class="tb-in">` + tabs.map(([v, icn, l]) => (v === 'vLive' && siteRule(meEmp, 'liveSite') ? [v, (UI.icons && UI.icons.vLiveSup) || 'map', T('tab_vLiveSup')] : [v, icn, l])).map(([v, icn, l]) => `<button data-tab="${v}" data-ic="${icn}" aria-current="${curTab() === v ? 'page' : 'false'}">${ic(icn, 25, 1.9)}<span>${l}</span>${extra(v)}</button>`).join('') + `</div>`;
   }
   tabIntro();
 }
 $('tabbar').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; vibrate(10); openTab(b.dataset.tab); };
 function openTab(v) {
-  if (v === view) return;
+  if (v === view && !(v === 'vWatch')) return;
   if (v === 'vEmp') renderEmp(); else if (v === 'vOwn') renderOwner(); else if (v === 'vLive') renderLive(); else if (v === 'vMap') renderMap(); else if (v === 'vChat') renderChat(); else if (v === 'vSet') renderSet(); else if (v === 'vUi') renderUi(); else if (v === 'vMe') renderMe(); else if (v === 'vWatch') renderWatch();
   scrollTo({ top: 0, behavior: RM ? 'auto' : 'smooth' });
 }
@@ -797,7 +801,7 @@ function updateEmpLive(full) {
   const emp = meEmp, r = myRec(), n = nowMin(), key = todayKey(), P = todayPlan();
   const hr = Math.floor(n / 60);
   const g = $('greet'); if (!g) return; paintLateSlot();
-  g.textContent = (hr < 12 ? T('morning') : T('evening')) + '، ' + emp.name.split(' ')[0];
+  g.textContent = (hr < 12 ? T('morning') : T('evening')) + '، ' + name2(emp.name);
   const nf0 = nextField(r, P);
   let txt, col; const left = x => dur(x - n); const G = grace();
   if (P.off) { txt = 'اليوم إجازة'; col = 'var(--muted)'; }
@@ -1032,6 +1036,7 @@ function setWatch(on) {
     const ys = idxOfKey(today0().getFullYear() + '-01-01');
     watchUnsubs.push(onSnapshot(collection(db, 'employees'), sn => { wEmps = sn.docs.map(empFromDoc); if (view === 'vWatch') paintWatch(); }, () => { }));
     watchUnsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', ys)), onDays, () => { }));
+    watchUnsubs.push(onSnapshot(collection(db, 'live'), sn => { onLive(sn); if (view === 'vWatch') paintWatch(); }, () => { }));
     if (me && !$('tabbar').hidden) paintTabs();
   } else if (!on && isWatch) {
     isWatch = false; watchUnsubs.forEach(u => { try { u(); } catch (e) { } }); watchUnsubs = []; wEmps = [];
@@ -1053,80 +1058,172 @@ function dayStatus(e, k) {
   return { s: 'absent', P };
 }
 const DS = { leave: ['في إجازة', 'c-leave'], ok: ['في الموعد', 'c-present'], early: ['بدري', 'c-present'], late: ['متأخر', 'c-late'], vlate: ['تأخير كبير', 'c-absent'], absent: ['غائب', 'c-absent'], off: ['إجازة', 'c-off'], wait: ['دوامه لسه ما بدأش', 'c-off'], notyet: ['متأخر · لسه ما وصلش', 'c-late'], extra: ['حضر في إجازة', 'c-break'] };
+let wFilter = 'all', wSeg = 'att';
+const WF = {
+  all: () => true,
+  present: x => ['ok', 'early', 'late', 'vlate', 'extra'].includes(x.d.s),
+  absent: x => x.d.s === 'absent',
+  late: x => ['late', 'vlate', 'notyet'].includes(x.d.s),
+  early: x => ['ok', 'early'].includes(x.d.s),
+  leave: x => x.d.s === 'leave',
+  live: x => online(lives[x.e.id])
+};
+const WFL = { all: 'بدون فلتر', present: 'حاضر', absent: 'غايب', late: 'متأخر', early: 'حضر بدري', leave: 'في إجازة', live: 'لايف لوكيشن' };
 function renderWatch() {
   show('vWatch'); const v = $('vWatch'), k = wDay || todayKey();
-  v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} متابعة الحضور والغياب</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
-   <section class="card reveal"><div class="fl"><label for="wDayIn">اليوم</label><input type="date" id="wDayIn" value="${k}" max="${todayKey()}"></div>
-    <div class="wkpis" id="wK"></div><div class="wlist" id="wList"></div></section>
-   ${exportCardHTML()}`;
-  $('wDayIn').onchange = e => { wDay = e.target.value || null; paintWatch(); };
-  bindExport(); paintWatch();
+  v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} المتابعة</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
+   <div class="seg wseg reveal"><button type="button" data-ws="att" class="${wSeg === 'att' ? 'on' : ''}">${ic('users', 16)} الحضور</button><button type="button" data-ws="live">${ic('live', 16)} لايف لوكيشن <i class="onl" id="wOnl"></i></button><button type="button" data-ws="rep" class="${wSeg === 'rep' ? 'on' : ''}">${ic('chart', 16)} التقارير</button></div>
+   ${wSeg === 'att' ? `<section class="card reveal" style="margin-top:12px"><div class="fl"><label for="wDayIn">اليوم</label><input type="date" id="wDayIn" value="${k}" max="${todayKey()}"></div>
+    <div class="okpis" id="wK"></div><div id="wBar"></div><div class="wlist" id="wList"></div></section>` : exportCardHTML()}`;
+  v.querySelector('.wseg').onclick = e => { const b = e.target.closest('[data-ws]'); if (!b) return; if (b.dataset.ws === 'live') { mapTab = 'live'; openTab('vMap'); return; } if (b.dataset.ws !== wSeg) { wSeg = b.dataset.ws; renderWatch(); } };
+  if (wSeg === 'att') {
+    $('wDayIn').onchange = e => { wDay = e.target.value || null; paintWatch(); };
+    $('wK').onclick = e => { const b = e.target.closest('[data-wf]'); if (!b) return; wFilter = b.dataset.wf === 'all' || wFilter === b.dataset.wf ? 'all' : b.dataset.wf; paintWatch(); };
+    $('wList').onclick = e => { const b = e.target.closest('[data-wemp]'); if (b) openSheet(b.dataset.wemp); };
+    $('wBar').onclick = e => { if (e.target.closest('#wfClear')) { wFilter = 'all'; paintWatch(); } };
+  } else bindExport();
+  paintWatch();
 }
 function paintWatch() {
+  const on = Object.values(lives).filter(online).length; if ($('wOnl')) $('wOnl').innerHTML = on ? `<b></b>${ar(on)}` : '';
   const el = $('wList'); if (!el) return; const k = (($('wDayIn') && $('wDayIn').value) || todayKey());
-  const list = allEmps().filter(e => e.active).map(e => ({ e, d: dayStatus(e, k) })).filter(x => x.d.s !== 'na');
-  const c = s => list.filter(x => s.includes(x.d.s)).length;
-  $('wK').innerHTML = [['حاضر', c(['ok', 'early', 'late', 'vlate', 'extra']), 'g'], ['بدري', c(['early']), 'g'], ['متأخر', c(['late', 'vlate', 'notyet']), 'y'], ['غائب', c(['absent']), 'r']].map(([l, n, t]) => `<div class="wk wk-${t}"><b class="num">${ar(n)}</b><small>${l}</small></div>`).join('');
+  const all = allEmps().filter(e => e.active).map(e => ({ e, d: dayStatus(e, k) })).filter(x => x.d.s !== 'na');
+  if (wFilter === 'live' && k !== todayKey()) wFilter = 'all';
+  const cls = { all: 'all', present: 'g', absent: 'r', late: 'a', early: 'e', leave: 'l', live: 'i' };
+  $('wK').innerHTML = Object.keys(WF).filter(f => f !== 'live' || k === todayKey()).map(f => `<button type="button" class="okpi ${cls[f]} ${wFilter === f ? 'sel' : ''}" data-wf="${f}"><div class="l">${WFL[f]}</div><b class="num">${ar(all.filter(WF[f]).length)}</b></button>`).join('');
+  $('wBar').innerHTML = wFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${WFL[wFilter]}</b><button type="button" id="wfClear">${ic('x', 13)} الكل</button></div>` : '';
+  const list = all.filter(WF[wFilter]);
   const order = { leave: 7, notyet: 1, absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
   el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
-    const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '';
-    return `<div class="wrow"><div class="av">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span></b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}</div></div>`;
-  }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين في اليوم ده</p>';
+    const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '', lv = online(lives[e.id]);
+    return `<button type="button" class="wrow" data-wemp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span>${lv ? ' <i class="onl"><b></b>لايف</i>' : ''}</b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}<small class="sexp">${esc(shiftExplain(e, k))}</small></div></button>`;
+  }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين هنا</p>';
 }
+let repP = 'month', repLast = null;
 function exportCardHTML() {
   const t = todayKey();
-  return `<section class="card reveal" style="margin-top:14px"><h2>${ic('file', 18)} تنزيل كشف الحضور والغياب (Excel)</h2>
-   <p class="muted small" style="margin:0 0 10px">ملف فيه صفحتين: «الملخص» لكل موظف (حضور، غياب، تأخير، بدري، ساعات العمل) و«التفاصيل» يوم بيوم.</p>
-   <div class="ggrid"><div class="fl"><label for="xMonth">الشهر</label><input type="month" id="xMonth" value="${t.slice(0, 7)}" max="${t.slice(0, 7)}"></div><div class="fl"><label for="xYear">السنة</label><input id="xYear" inputmode="numeric" value="${t.slice(0, 4)}"></div></div>
-   <div class="row-btns" style="margin-top:6px"><button class="btn primary" type="button" id="xM">${ic('download', 16)} كشف الشهر</button><button class="btn ghost" type="button" id="xY">${ic('download', 16)} كشف السنة</button></div>
+  return `<section class="card reveal repcard" style="margin-top:14px"><h2>${ic('chart', 18)} تقارير الحضور والغياب</h2>
+   <p class="muted small" style="margin:0 0 10px">اختار الفترة تشوف الملخص لكل موظف، ونزّله Excel منسّق فيه: الملخص، والحاضرين، والغايبين، والتفاصيل يوم بيوم.</p>
+   <div class="seg repseg">${[['day', 'يومي'], ['month', 'شهري'], ['year', 'سنوي']].map(([k, l]) => `<button type="button" data-rp="${k}" class="${repP === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+   <div class="ggrid" style="margin-top:10px">
+    <div class="fl" data-rpf="day" ${repP === 'day' ? '' : 'hidden'}><label for="xDay">اليوم</label><input type="date" id="xDay" value="${t}" max="${t}"></div>
+    <div class="fl" data-rpf="month" ${repP === 'month' ? '' : 'hidden'}><label for="xMonth">الشهر</label><input type="month" id="xMonth" value="${t.slice(0, 7)}" max="${t.slice(0, 7)}"></div>
+    <div class="fl" data-rpf="year" ${repP === 'year' ? '' : 'hidden'}><label for="xYear">السنة</label><input id="xYear" inputmode="numeric" value="${t.slice(0, 4)}"></div>
+   </div>
+   <div class="row-btns" style="margin-top:6px"><button class="btn ghost" type="button" id="xShow">${ic('eye', 16)} اعرض التقرير</button><button class="btn primary" type="button" id="xDl">${ic('download', 16)} تنزيل Excel</button></div>
+   <div id="repOut"></div>
    ${NATIVE ? '<p class="muted small" style="margin:8px 0 0">لو التنزيل ما اشتغلش من تطبيق الأندرويد، افتح الموقع من المتصفح ونزّله من هناك.</p>' : ''}</section>`;
 }
+function repRange() {
+  if (repP === 'day') { const d = $('xDay').value || todayKey(); return [d, d, 'يوم ' + d, `shamrani-attendance-${d}.xlsx`]; }
+  if (repP === 'month') { const m = $('xMonth').value || todayKey().slice(0, 7), [y, mo] = m.split('-').map(Number), last = new Date(y, mo, 0).getDate(); return [m + '-01', m + '-' + pad(last), 'شهر ' + m, `shamrani-attendance-${m}.xlsx`]; }
+  const y = parseInt(toEn($('xYear').value), 10); if (!(y > 2000 && y < 2100)) { toast('bad', 'اكتب السنة صح', 'مثلاً ' + todayKey().slice(0, 4), 'التقارير'); return null; }
+  return [y + '-01-01', y + '-12-31', 'سنة ' + y, `shamrani-attendance-${y}.xlsx`];
+}
 function bindExport() {
-  if (!$('xM')) return;
-  $('xM').onclick = () => { const m = $('xMonth').value || todayKey().slice(0, 7), [y, mo] = m.split('-').map(Number), last = new Date(y, mo, 0).getDate(); exportXlsx(m + '-01', m + '-' + pad(last), 'شهر ' + m, `shamrani-attendance-${m}.xlsx`); };
-  $('xY').onclick = () => { const y = parseInt(toEn($('xYear').value), 10); if (!(y > 2000 && y < 2100)) { toast('bad', 'اكتب السنة صح', 'مثلاً ' + todayKey().slice(0, 4), 'التقارير'); return; } exportXlsx(y + '-01-01', y + '-12-31', 'سنة ' + y, `shamrani-attendance-${y}.xlsx`); };
+  if (!$('xDl')) return;
+  document.querySelector('.repseg').onclick = e => { const b = e.target.closest('[data-rp]'); if (!b) return; repP = b.dataset.rp; document.querySelectorAll('.repseg [data-rp]').forEach(x => x.classList.toggle('on', x === b)); document.querySelectorAll('[data-rpf]').forEach(x => x.hidden = x.dataset.rpf !== repP); showReport(); };
+  ['xDay', 'xMonth'].forEach(id => $(id).onchange = showReport);
+  $('xShow').onclick = showReport;
+  $('xDl').onclick = () => { const R = repRange(); if (R) exportXlsx(...R); };
+  showReport();
+}
+async function showReport() {
+  const R = repRange(), out = $('repOut'); if (!R || !out) return;
+  out.innerHTML = '<p class="muted small" style="text-align:center;margin:12px 0">جارٍ التجهيز…</p>';
+  try {
+    const rep = await buildReport(R[0], R[1]); if (!$('repOut')) return;
+    if (!rep) { out.innerHTML = '<p class="muted small" style="text-align:center;margin:12px 0">الفترة دي لسه ماجتش</p>'; return; }
+    const rows = rep.sum.slice(1), tot = i => rows.reduce((a, r) => a + (+r[i] || 0), 0);
+    out.innerHTML = `<div class="reptot"><div class="wk wk-g"><b class="num">${ar(tot(3))}</b><small>أيام حضور</small></div><div class="wk wk-r"><b class="num">${ar(tot(4))}</b><small>أيام غياب</small></div><div class="wk wk-y"><b class="num">${ar(tot(7) + tot(8))}</b><small>مرات تأخير</small></div><div class="wk wk-l"><b class="num">${ar(tot(11))}</b><small>أيام إجازة</small></div></div>
+     <div class="reptbl"><div class="rr rh"><span>الموظف</span><span>حضور</span><span>غياب</span><span>تأخير</span><span>إجازة</span><span>النسبة</span></div>
+     ${rows.sort((a, b) => b[4] - a[4] || String(a[0]).localeCompare(String(b[0]), 'ar')).map(r => `<div class="rr"><span><b>${esc(r[0])}</b><small>${esc(r[1] || '')}</small></span><span class="g">${ar(r[3])}</span><span class="${r[4] ? 'r' : ''}">${ar(r[4])}</span><span class="${r[7] + r[8] ? 'y' : ''}">${ar(r[7] + r[8])}</span><span>${ar(r[11])}</span><span>${r[12] ? ar(parseInt(r[12], 10)) + '٪' : '—'}</span></div>`).join('') || '<p class="muted small">مفيش بيانات</p>'}</div>`;
+  } catch (x) { out.innerHTML = `<p class="err">${esc(errWhy(x))}</p>`; }
 }
 async function loadXLSX() {
-  if (window.XLSX) return window.XLSX;
-  await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  if (window.XLSX && window.XLSX.__styled) return window.XLSX;
+  const add = src => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+  try { await add('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'); if (window.XLSX) window.XLSX.__styled = true; }
+  catch (e) { if (!window.XLSX) await add('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'); }
   return window.XLSX;
+}
+async function buildReport(fromK, toK) {
+  const a = idxOfKey(fromK), b = Math.min(idxOfKey(toK), todayIdx());
+  if (b < a) return null;
+  const snap = await getDocs(query(collection(db, 'days'), where('day', '>=', a), where('day', '<=', b)));
+  const R = {}; snap.docs.forEach(d => { const x = d.data(); if (x.day < a || x.day > b) return; (R[x.uid] = R[x.uid] || {})[keyOfIdx(x.day)] = docToRec(x); });
+  const hm = m => m == null ? '' : tm(m), hrs = m => Math.round(m / 6) / 10;
+  const sum = [['الموظف', 'القسم', 'أيام العمل', 'حضور', 'غياب', 'في الموعد', 'بدري', 'متأخر', 'تأخير كبير', 'مجموع التأخير (دقيقة)', 'ساعات العمل', 'أيام الإجازة', 'نسبة الحضور']];
+  const det = [['التاريخ', 'اليوم', 'الموظف', 'القسم', 'الحالة', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'التأخير (دقيقة)', 'ساعات العمل', 'سبب التأخير', 'حي الإشراف']];
+  const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' });
+  allEmps().filter(e => e.active || R[e.id]).forEach(e => {
+    let wd = 0, pr = 0, ab = 0, ok = 0, ea = 0, la = 0, vl = 0, lm = 0, mins = 0, lvn = 0;
+    for (let i = a; i <= b; i++) {
+      const k = keyOfIdx(i); if (k < e.start) continue;
+      const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
+      if (!P.off) wd++;
+      const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '']); } continue; }
+      if (!has) { if (P.off || (isToday(k) && nowMin() <= absT(P))) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
+      pr++; const w = worked(r, k, e); mins += w;
+      let st = 'حضر في إجازة', late = 0;
+      if (!P.off) {
+        const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
+        late = (r.in != null ? Math.max(0, r.in - P.start - grace()) : 0) + (P.two && r.in2 != null ? Math.max(0, r.in2 - P.b2 - brG()) : 0);
+        if (r.in != null && r.in < P.start) { st = 'بدري'; ea++; } else if (lv === 'r') { st = 'تأخير كبير'; vl++; } else if (lv === 'y') { st = 'متأخر'; la++; } else { st = 'في الموعد'; ok++; }
+        lm += late;
+      }
+      det.push([k, dayName.format(fromKey(k)), e.name, e.dept, st, hm(r.in), hm(r.out1) + (r.m.out1 === 'auto' ? ' تلقائي' : ''), hm(r.in2), hm(r.out) + (r.m.out === 'auto' ? ' تلقائي' : ''), late || '', hrs(w), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
+    }
+    sum.push([e.name, e.dept, wd, pr, ab, ok, ea, la, vl, lm, hrs(mins), lvn, (wd - lvn) > 0 ? Math.round(Math.min(pr, wd - lvn) / (wd - lvn) * 100) + '%' : '']);
+  });
+  det.splice(1, det.length - 1, ...det.slice(1).sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : String(x[2]).localeCompare(String(y[2]), 'ar')));
+  return { sum, det, a, b };
+}
+// ألوان الإكسيل
+const XC = { red: 'C81E23', dark: '7A1216', pink: 'FBE9EA', line: 'D9D9D9', zebra: 'F7F7F7',
+  st: { 'في الموعد': ['C6EFCE', '006100'], 'بدري': ['C6EFCE', '006100'], 'متأخر': ['FFEB9C', '9C5700'], 'تأخير كبير': ['FFC7CE', '9C0006'], 'غائب': ['FFC7CE', '9C0006'], 'حضر في إجازة': ['DDEBF7', '1F4E78'] } };
+function styledSheet(X, title, sub, rows, widths, statusCol) {
+  const head = rows[0], n = head.length, aoa = [[title], [sub], [], ...rows];
+  const ws = X.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = widths.map(w => ({ wch: w }));
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: n - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: n - 1 } }];
+  ws['!rows'] = [{ hpt: 30 }, { hpt: 20 }, { hpt: 6 }, { hpt: 26 }];
+  if (!X.__styled) return ws;
+  const bd = { style: 'thin', color: { rgb: XC.line } }, border = { top: bd, bottom: bd, left: bd, right: bd };
+  const font = (o = {}) => ({ name: 'Arial', sz: 11, ...o });
+  for (let c = 0; c < n; c++) {
+    const A = X.utils.encode_cell;
+    const t = ws[A({ r: 0, c })] || (ws[A({ r: 0, c })] = { t: 's', v: '' }); t.s = { font: font({ sz: 16, bold: true, color: { rgb: 'FFFFFF' } }), fill: { fgColor: { rgb: XC.red } }, alignment: { horizontal: 'center', vertical: 'center', readingOrder: 2 } };
+    const u = ws[A({ r: 1, c })] || (ws[A({ r: 1, c })] = { t: 's', v: '' }); u.s = { font: font({ sz: 11, color: { rgb: XC.dark } }), fill: { fgColor: { rgb: XC.pink } }, alignment: { horizontal: 'center', vertical: 'center', readingOrder: 2 } };
+    const h = ws[A({ r: 3, c })]; if (h) h.s = { font: font({ bold: true, color: { rgb: 'FFFFFF' } }), fill: { fgColor: { rgb: XC.dark } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true, readingOrder: 2 }, border };
+    for (let r = 4; r < aoa.length; r++) {
+      const cell = ws[A({ r, c })] || (ws[A({ r, c })] = { t: 's', v: '' });
+      const st = { font: font(), alignment: { horizontal: c === 0 || (statusCol != null && c === 2) ? 'right' : 'center', vertical: 'center', readingOrder: 2 }, border, fill: { fgColor: { rgb: (r % 2) ? 'FFFFFF' : XC.zebra } } };
+      if (statusCol != null && c === statusCol) { const k = Object.keys(XC.st).find(x => String(cell.v).startsWith(x)); const col = k ? XC.st[k] : String(cell.v).startsWith('إجازة') ? ['E4DFEC', '5B3F86'] : null; if (col) { st.fill = { fgColor: { rgb: col[0] } }; st.font = font({ bold: true, color: { rgb: col[1] } }); } }
+      cell.s = st;
+    }
+  }
+  ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 3, c: 0 }, e: { r: Math.max(3, aoa.length - 1), c: n - 1 } }) };
+  return ws;
 }
 async function exportXlsx(fromK, toK, label, fname) {
   toast('info', 'جارٍ تجهيز الكشف…', label, 'التقارير');
   try {
-    const X = await loadXLSX(), a = idxOfKey(fromK), b = Math.min(idxOfKey(toK), todayIdx());
-    if (b < a) { toast('warn', 'الفترة دي لسه ماجتش', '', 'التقارير'); return; }
-    const snap = await getDocs(query(collection(db, 'days'), where('day', '>=', a), where('day', '<=', b)));
-    const R = {}; snap.docs.forEach(d => { const x = d.data(); if (x.day < a || x.day > b) return; (R[x.uid] = R[x.uid] || {})[keyOfIdx(x.day)] = docToRec(x); });
-    const hm = m => m == null ? '' : tm(m), hrs = m => Math.round(m / 6) / 10;
-    const sum = [['الموظف', 'القسم', 'أيام العمل', 'حضور', 'غياب', 'في الموعد', 'بدري', 'متأخر', 'تأخير كبير', 'مجموع التأخير (دقيقة)', 'ساعات العمل', 'أيام الإجازة', 'نسبة الحضور']];
-    const det = [['التاريخ', 'اليوم', 'الموظف', 'القسم', 'الحالة', 'الحضور', 'خروج البريك', 'العودة', 'الانصراف', 'التأخير (دقيقة)', 'ساعات العمل', 'سبب التأخير', 'حي الإشراف']];
-    const dayName = new Intl.DateTimeFormat('ar-SA', { weekday: 'long' });
-    allEmps().filter(e => e.active || R[e.id]).forEach(e => {
-      let wd = 0, pr = 0, ab = 0, ok = 0, ea = 0, la = 0, vl = 0, lm = 0, mins = 0, lvn = 0;
-      for (let i = a; i <= b; i++) {
-        const k = keyOfIdx(i); if (k < e.start) continue;
-        const P = planKey(k, e), r = autoRec((R[e.id] && R[e.id][k]) || null, k, e), has = r && (r.in != null || r.in2 != null);
-        if (!P.off) wd++;
-        const lvd = onLeave(e, k); if (!has && lvd) { if (!P.off) { lvn++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'إجازة ' + (LEAVE_T[lvd.type] || ''), '', '', '', '', '', 0, lvd.note || '', '']); } continue; }
-        if (!has) { if (P.off || (isToday(k) && nowMin() <= absT(P))) continue; ab++; det.push([k, dayName.format(fromKey(k)), e.name, e.dept, 'غائب', '', '', '', '', '', 0, '', '']); continue; }
-        pr++; const w = worked(r, k, e); mins += w;
-        let st = 'حضر في إجازة', late = 0;
-        if (!P.off) {
-          const lv = r.in != null ? lvlOf('in', r.in, P) : lvlOf('in2', r.in2, P);
-          late = (r.in != null ? Math.max(0, r.in - P.start - grace()) : 0) + (P.two && r.in2 != null ? Math.max(0, r.in2 - P.b2 - brG()) : 0);
-          if (r.in != null && r.in < P.start) { st = 'بدري'; ea++; } else if (lv === 'r') { st = 'تأخير كبير'; vl++; } else if (lv === 'y') { st = 'متأخر'; la++; } else { st = 'في الموعد'; ok++; }
-          lm += late;
-        }
-        det.push([k, dayName.format(fromKey(k)), e.name, e.dept, st, hm(r.in), hm(r.out1) + (r.m.out1 === 'auto' ? ' تلقائي' : ''), hm(r.in2), hm(r.out) + (r.m.out === 'auto' ? ' تلقائي' : ''), late || '', hrs(w), [r.note, r.note2].filter(Boolean).join(' / '), [r.site && r.site.in, r.site && r.site.in2].filter(Boolean).join(' / ')]);
-      }
-      sum.push([e.name, e.dept, wd, pr, ab, ok, ea, la, vl, lm, hrs(mins), lvn, (wd - lvn) > 0 ? Math.round(Math.min(pr, wd - lvn) / (wd - lvn) * 100) + '%' : '']);
-    });
-    det.splice(1, det.length - 1, ...det.slice(1).sort((x, y) => x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : String(x[2]).localeCompare(String(y[2]), 'ar')));
-    const wb = X.utils.book_new(), s1 = X.utils.aoa_to_sheet([['كشف الحضور والغياب · ' + COMPANY], ['الفترة: ' + fromK + ' إلى ' + keyOfIdx(b)], [], ...sum]), s2 = X.utils.aoa_to_sheet(det);
-    s1['!cols'] = [24, 14, 10, 8, 8, 10, 8, 8, 11, 18, 11, 11].map(w => ({ wch: w })); s2['!cols'] = [12, 10, 22, 14, 12, 10, 14, 10, 14, 12, 10, 24, 18].map(w => ({ wch: w }));
-    X.utils.book_append_sheet(wb, s1, 'الملخص'); X.utils.book_append_sheet(wb, s2, 'التفاصيل'); wb.Workbook = { Views: [{ RTL: true }] };
-    const out = X.write(wb, { bookType: 'xlsx', type: 'array' });
+    const X = await loadXLSX(), rep = await buildReport(fromK, toK);
+    if (!rep) { toast('warn', 'الفترة دي لسه ماجتش', '', 'التقارير'); return; }
+    const { sum, det, b } = rep, per = 'الفترة: ' + (fromK === keyOfIdx(b) ? fromK : fromK + ' إلى ' + keyOfIdx(b)) + ' · اتطبع ' + todayKey() + ' ' + tm(nowMin());
+    const dw = [12, 10, 22, 14, 13, 10, 13, 10, 14, 12, 10, 26, 18];
+    const pres = [det[0], ...det.slice(1).filter(r => !['غائب'].includes(r[4]) && !String(r[4]).startsWith('إجازة'))];
+    const abs = [det[0], ...det.slice(1).filter(r => r[4] === 'غائب' || String(r[4]).startsWith('إجازة'))];
+    const sumS = styledSheet(X, 'ملخص الحضور والغياب · ' + COMPANY, per, sum, [24, 14, 10, 8, 8, 10, 8, 8, 11, 18, 11, 11, 11], null);
+    if (X.__styled) for (let r = 4; r < sum.length + 3; r++) { const c = sumS[X.utils.encode_cell({ r, c: 4 })]; if (c && +c.v > 0) c.s = { ...c.s, font: { name: 'Arial', sz: 11, bold: true, color: { rgb: '9C0006' } }, fill: { fgColor: { rgb: 'FFC7CE' } } }; const g = sumS[X.utils.encode_cell({ r, c: 3 })]; if (g) g.s = { ...g.s, font: { name: 'Arial', sz: 11, bold: true, color: { rgb: '006100' } } }; }
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, sumS, 'الملخص');
+    X.utils.book_append_sheet(wb, styledSheet(X, 'الحاضرين · ' + COMPANY, per, pres, dw, 4), 'الحاضرين');
+    X.utils.book_append_sheet(wb, styledSheet(X, 'الغايبين والإجازات · ' + COMPANY, per, abs, dw, 4), 'الغايبين');
+    X.utils.book_append_sheet(wb, styledSheet(X, 'التفاصيل يوم بيوم · ' + COMPANY, per, det, dw, 4), 'التفاصيل');
+    wb.Workbook = { Views: [{ RTL: true }] };
+    const out = X.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true });
     saveBlob(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
     toast('ok', 'تم تنزيل الكشف', label + ' · ' + ar(sum.length - 1) + ' موظف', 'التقارير');
   } catch (x) { toast('bad', 'تعذّر تجهيز الكشف', errWhy(x), 'التقارير'); }
@@ -1144,7 +1241,7 @@ function punchCards(r, P) {
       <div class="pi"><b>${FL[f]} ${tv(f, r, P)}</b><small>${ic(mi[0], 12)} ${esc(mi[1])}${g && g.acc != null ? ' · دقة ±' + ar(g.acc) + ' م' : ''}</small>${sp && sp.district ? `<small>${ic('pin', 12)} ${esc(sp.district)}${sp.note ? ' · ' + esc(sp.note) : ''}</small>` : ''}${g ? `<a class="lnk" target="_blank" rel="noopener" href="https://maps.google.com/?q=${g.lat},${g.lng}">${ic('map', 12)} مكان التسجيل على الخريطة</a>` : ''}</div></div>`;
   }).join('') + (r.lph || []).map(x => `<div class="pcard"><button type="button" class="pimg" ${x.media ? `data-pmedia="${esc(x.media)}"` : ''} data-pfull="${x.thumb}" aria-label="تكبير صورة التأخير"><img src="${x.thumb}" alt=""></button><div class="pi"><b>صورة مع سبب التأخير</b><small>${esc(x.text)}</small></div></div>`).join('') + `</div>`;
 }
-document.addEventListener('click', e => { const w = e.target.closest('.whob[data-whouid]'); if (w && canSee()) openSheet(w.dataset.whouid); });
+document.addEventListener('click', e => { const w = e.target.closest('.whob[data-whouid]'); if (w && (canSee() || isWatch)) openSheet(w.dataset.whouid); });
 document.addEventListener('click', async e => {
   const b = e.target.closest('.pimg[data-pfull]'); if (!b) return;
   let src = b.dataset.pfull; if (b.dataset.pmedia) { const full = await loadMedia(b.dataset.pmedia).catch(() => null); if (full) src = full; }
@@ -1159,7 +1256,8 @@ function shiftExplain(e, k) {
   const P = planKey(k, e), r = getRec(e, k), lv = onLeave(e, k), isT = isToday(k), n = nowMin();
   if (lv) return 'في إجازة ' + (LEAVE_T[lv.type] || '') + ' · العودة ' + dFmt.format(fromKey(lv.back));
   if (P.off) return 'يوم إجازة (مفيش دوام)';
-  const a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= absT(P) ? 'متأخر · لسه ما وصلش (يتحسب غياب ' + tm(absT(P)) + ')' : 'غايب · ما سجّلش حضور ✗');
+  let a = r && r.in != null ? 'حضر ' + tm(r.in) + (lvlOf('in', r.in, P) === 'g' ? (r.in < P.start ? ' (بدري)' : ' (في الموعد)') : ' (متأخر ' + dur(r.in - P.start) + ')') : (isT && n <= P.start + grace() ? 'دوامه لسه ما بدأش (من ' + tm(P.start) + ')' : isT && n <= absT(P) ? 'متأخر · لسه ما وصلش (يتحسب غياب ' + tm(absT(P)) + ')' : 'غايب · ما سجّلش حضور ✗');
+  if (!(r && (r.in != null || r.in2 != null))) a += ' · دوامه النهارده ' + P.shifts.map(([x, y]) => tm(x) + '–' + tm(y)).join(' و ') + (e.sched && e.sched.mode === 'custom' ? ' (خاص)' : ' (العام)');
   if (!P.two) return a + (r && r.out != null ? ' · انصرف ' + tm(r.out) + (r.m.out === 'auto' ? ' (تلقائي)' : '') : '');
   const b = r && r.in2 != null ? 'رجع ' + tm(r.in2) + (lvlOf('in2', r.in2, P) === 'g' ? ' ✓' : ' (متأخر ' + dur(r.in2 - P.b2) + ')') : (isT && n < P.b2 + brG() ? (n >= P.b1 ? 'في البريك دلوقتي' : 'لسه ما بدأتش') : isT && n <= P.end ? 'لسه ما رجعش (الفترة لحد ' + tm(P.end) + ')' : 'ما رجعش بعد البريك ✗');
   return 'الفترة الأولى: ' + a + ' · الفترة التانية: ' + b;
@@ -1174,7 +1272,45 @@ async function photoFromFile(f) {
   return { photo: await sq(d, 320), photoSm: await sq(d, 72) };
 }
 const picInputs = id => `<input type="file" id="${id}Cam" accept="image/*" capture="user" hidden><input type="file" id="${id}Gal" accept="image/*" hidden>`;
+const picCb = {};
+function camPick(id) { openCamera().then(async blob => { if (blob === null) return; if (!blob) { $(id + 'Cam').click(); return; } try { picCb[id](await photoFromFile(blob)); } catch (e) { toast('bad', 'تعذّر قراءة الصورة', 'جرّب تاني', 'حسابك'); } }); }
+// كاميرا جوه التطبيق: فلتر تجميل، والصورة بتتحفظ زي الحقيقة (مش معكوسة)
+function openCamera(o = {}) {
+  const site = !!o.site;
+  return new Promise(async resolve => {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return resolve(false);
+    let facing = site ? 'environment' : 'user', stream = null, beauty = !site && (() => { try { return localStorage.getItem('sh-beauty') !== '0'; } catch (e) { return true; } })();
+    const box = document.createElement('div'); box.className = 'camx';
+    box.innerHTML = `<div class="camv"><video id="cxV" playsinline muted autoplay></video><video id="cxB" playsinline muted autoplay aria-hidden="true"></video></div>
+      <div class="camtop"><button type="button" class="camb" id="cxX" aria-label="إغلاق">${ic('x', 20)}</button>${site ? `<span class="camtag">${ic('camera', 16)} صوّر المكان دلوقتي</span>` : `<button type="button" class="camb wide ${beauty ? 'on' : ''}" id="cxF">${ic('star', 18)} فلتر التجميل</button>`}</div>
+      <div class="cambar">${site ? '<span class="camb ghostb"></span>' : `<button type="button" class="camb" id="cxG" aria-label="من المعرض">${ic('image', 22)}</button>`}<button type="button" class="camshot" id="cxS" aria-label="تصوير"><i></i></button><button type="button" class="camb" id="cxR" aria-label="قلب الكاميرا">${ic('refresh', 22)}</button></div>`;
+    document.body.appendChild(box);
+    const V = box.querySelector('#cxV'), B = box.querySelector('#cxB');
+    const paint = () => { box.classList.toggle('beauty', beauty); box.classList.toggle('front', facing === 'user'); if ($('cxF')) $('cxF').classList.toggle('on', beauty); };
+    const stop = () => { if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; };
+    const start = async () => { stop(); try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false }); V.srcObject = stream; B.srcObject = stream; await V.play().catch(() => { }); B.play().catch(() => { }); paint(); return true; } catch (e) { return false; } };
+    const done = v => { stop(); box.remove(); resolve(v); };
+    if (!(await start())) { box.remove(); return resolve(false); }
+    $('cxX').onclick = () => done(null);
+    if ($('cxG')) $('cxG').onclick = () => done(false);
+    if ($('cxF')) $('cxF').onclick = () => { beauty = !beauty; try { localStorage.setItem('sh-beauty', beauty ? '1' : '0'); } catch (e) { } paint(); };
+    $('cxR').onclick = async () => { facing = facing === 'user' ? 'environment' : 'user'; await start(); };
+    $('cxS').onclick = () => {
+      const w = V.videoWidth, h = V.videoHeight; if (!w) return;
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+      // الصورة زي الحقيقة: من غير عكس
+      if (beauty) {
+        x.filter = 'brightness(1.06) contrast(1.04) saturate(1.1)'; x.drawImage(V, 0, 0, w, h);
+        x.globalAlpha = .38; x.filter = `blur(${Math.max(2, Math.round(w / 260))}px) brightness(1.1) saturate(1.05)`; x.drawImage(V, 0, 0, w, h);
+        x.globalAlpha = .2; x.filter = 'none'; x.globalCompositeOperation = 'soft-light'; x.fillStyle = '#ffe8dc'; x.fillRect(0, 0, w, h); x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
+      } else x.drawImage(V, 0, 0, w, h);
+      box.classList.add('flash');
+      c.toBlob(bl => done(bl || false), 'image/jpeg', .9);
+    };
+  });
+}
 function bindPic(id, onPic) {
+  picCb[id] = onPic;
   [id + 'Cam', id + 'Gal'].forEach(x => $(x).onchange = async () => { const f = $(x).files && $(x).files[0]; if (!f) return; try { onPic(await photoFromFile(f)); } catch (e) { toast('bad', 'تعذّر قراءة الصورة', 'جرّب صورة تانية', 'حسابك'); } $(x).value = ''; });
 }
 // أول دخول: الصورة الشخصية إجباري
@@ -1182,7 +1318,7 @@ function renderSetup() {
   show('vSetup'); const v = $('vSetup'); let pic = null;
   v.innerHTML = `<div class="authcard setup">
     <div class="steps"><span class="done">١ كلمة السر</span><i></i><span class="on">٢ صورتك</span></div>
-    <h1>أهلاً ${esc(meEmp.name.split(' ')[0])} 👋</h1>
+    <h1>أهلاً ${esc(name2(meEmp.name))} 👋</h1>
     <p class="muted">حط صورتك الشخصية عشان تكمّل. الصورة بتظهر للمدير وفي الشات.</p>
     <button type="button" class="bigpic" id="suPic" aria-label="إضافة صورة شخصية">${ic('camera', 40, 1.4)}<span>صورتك هنا</span></button>
     <div class="row-btns" style="justify-content:center"><button class="btn primary" type="button" id="suCamB">${ic('camera', 16)} صوّر نفسك</button><button class="btn ghost" type="button" id="suGalB">${ic('image', 16)} من المعرض</button></div>
@@ -1192,7 +1328,7 @@ function renderSetup() {
     <button class="btn primary big" type="button" id="suSave" disabled>${ic('check', 18)} حفظ ومتابعة</button>
     <div class="err" id="suErr">الصورة الشخصية مطلوبة</div>
   </div>`;
-  const pick = () => $('suCam').click();
+  const pick = () => camPick('su');
   $('suPic').onclick = pick; $('suCamB').onclick = pick; $('suGalB').onclick = () => $('suGal').click();
   bindPic('su', p => { pic = p; $('suPic').innerHTML = `<img src="${p.photo}" alt="">`; $('suPic').classList.add('has'); $('suSave').disabled = false; $('suErr').textContent = ''; });
   $('suSave').onclick = async () => {
@@ -1236,7 +1372,7 @@ function renderMe() {
    </section>`;
   $('mePic').onclick = () => { $('mePicBtns').hidden = !$('mePicBtns').hidden; };
   if (!e.photo) $('mePicBtns').hidden = false;
-  $('meCamB').onclick = () => $('meCam').click(); $('meGalB').onclick = () => $('meGal').click();
+  $('meCamB').onclick = () => camPick('me'); $('meGalB').onclick = () => $('meGal').click();
   bindPic('me', async p => {
     $('mePic').innerHTML = `<img src="${p.photo}" alt=""><span class="camfab">${ic('camera', 16)}</span>`; $('mePicBtns').hidden = true;
     try { await updateDoc(doc(db, 'employees', me.uid), { photo: p.photo, photoSm: p.photoSm, profileDone: true, profileAt: serverTimestamp() }); toast('ok', 'تم تغيير صورتك', '', 'حسابك'); renderMe(); } catch (x) { toast('bad', 'تعذّر حفظ الصورة', errWhy(x), 'حسابك'); }
@@ -1338,7 +1474,6 @@ function siteCapture(purpose) {
     inner.innerHTML = `<div class="sh-head"><div class="av" style="background:var(--gold);color:#fff">${ic('helmet', 22)}</div><b>صورة الموقع مطلوبة <span class="muted small">${esc(purpose)}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>
       <p class="muted small" style="margin:0 0 12px">قسم الإشراف: صوّر الموقع واكتب اسم الحي، وبعدين يتسجّل ${esc(purpose)}. تقدر تسجّل من أي مكان.</p>
       <button class="sitecam" id="stCam" type="button">${ic('camera', 34, 1.5)}<b>صوّر الموقع</b><small>صورة واضحة للمكان أو المشروع</small></button>
-      <input type="file" id="stFile" accept="image/*" capture="environment" hidden>
       <div class="fl" style="margin-top:12px"><label for="stDist">اسم الحي</label><input id="stDist" maxlength="80" placeholder="جارٍ تحديد الحي من الخريطة…"></div>
       <div class="fl"><label for="stNote">ملاحظة <span class="muted small">(اختياري)</span></label><input id="stNote" maxlength="200" placeholder="مثلاً: فيلا العميل، صب سقف الدور الأول"></div>
       <div class="muted small" id="stGeo" style="margin:4px 0 10px">${ic('pin', 13)} جارٍ تحديد مكانك…</div>
@@ -1353,9 +1488,10 @@ function siteCapture(purpose) {
       const d = await districtOf(g); if (done) return;
       if (d && !dist.value.trim()) dist.value = d; dist.placeholder = 'اكتب اسم الحي'; chk();
     }).catch(() => { if (done) return; $('stGeo').innerHTML = `${ic('alert', 13)} فعّل الموقع (GPS) واسمح للتطبيق يستخدمه`; dist.placeholder = 'اكتب اسم الحي'; });
-    $('stCam').onclick = () => { $('stFile').value = ''; $('stFile').click(); };
-    $('stFile').onchange = async () => {
-      const f = $('stFile').files && $('stFile').files[0]; if (!f) return;
+    $('stCam').onclick = async () => {
+      const f = await openCamera({ site: true });
+      if (f === null) return;
+      if (!f) { $('stErr').innerHTML = 'لازم تسمح للتطبيق يستخدم الكاميرا عشان تسجّل. افتح <b>إعدادات الجوال ← التطبيقات ← بصمة الشمراني (أو المتصفح) ← الأذونات ← الكاميرا ← سماح</b>، وارجع دوس «صوّر الموقع» تاني.'; return; }
       try { photo = (await packImage(f)).data; thumb = await shrinkData(photo, 240); $('stCam').innerHTML = `<img src="${thumb}" alt="صورة الموقع"><small>${ic('camera', 13)} صوّر تاني</small>`; $('stCam').classList.add('has'); $('stErr').textContent = ''; }
       catch (e) { $('stErr').textContent = 'تعذّر قراءة الصورة، صوّر تاني'; }
       chk();
@@ -1363,9 +1499,21 @@ function siteCapture(purpose) {
     dist.oninput = chk;
     $('stOk').onclick = async () => {
       if (!geo) { $('stOk').disabled = true; try { geo = await getGeo(); } catch (e) { $('stErr').textContent = 'لازم تفعّل الموقع (GPS) عشان يتسجّل مكان الموقع'; chk(); return; } }
+      try { photo = await stampPhoto(photo, [dist.value.trim(), dFmt.format(new Date()) + ' · ' + clockFmt.format(new Date())]); thumb = await shrinkData(photo, 240); } catch (e) { }
       finish({ photo, thumb, district: dist.value.trim(), note: $('stNote').value.trim(), geo });
     };
   });
+}
+// يكتب اسم الحي والتاريخ والساعة على الصورة نفسها
+function stampPhoto(src, lines) {
+  return new Promise((res, rej) => { const im = new Image(); im.onload = () => {
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    const fs = Math.max(16, Math.round(c.width / 28)), pad = Math.round(fs * .6), h = lines.length * fs * 1.35 + pad * 2;
+    x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, c.height - h, c.width, h);
+    x.fillStyle = '#fff'; x.textAlign = 'right'; x.direction = 'rtl'; x.textBaseline = 'top';
+    lines.forEach((t, i) => { x.font = `${i ? 400 : 700} ${i ? Math.round(fs * .85) : fs}px "IBM Plex Sans Arabic", Tahoma, sans-serif`; x.fillText(t, c.width - pad, c.height - h + pad + i * fs * 1.35); });
+    x.textAlign = 'left'; x.font = `600 ${Math.round(fs * .7)}px Tahoma, sans-serif`; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText('بصمة الشمراني', pad, c.height - h + pad);
+    res(c.toDataURL('image/jpeg', .82)); }; im.onerror = rej; im.src = src; });
 }
 async function saveSiteMedia(st) { const m = await addDoc(collection(db, 'media'), { uid: me.uid, kind: 'site', data: st.photo, at: serverTimestamp() }); mediaCache[m.id] = Promise.resolve(st.photo); return m.id; }
 async function saveVisit(st, kind, mid) {
@@ -1835,7 +1983,7 @@ function renderMap() {
   let vSeen = 0; try { vSeen = +(localStorage.getItem('sh-vseen-' + me.uid) || 0); } catch (e) { }
   if (mapTab === 'visits') { vSeen = Date.now(); try { localStorage.setItem('sh-vseen-' + me.uid, String(vSeen)); } catch (e) { } }
   const todayN = visits.filter(x => x.day === todayIdx() && x.atMs > vSeen).length, onN = Object.values(lives).filter(online).length;
-  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('live', 16)} لايف لوكيشن${onN ? ` <i class="onl"><b></b>${ar(onN)} online</i>` : ''}</button><button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic((UI.icons && UI.icons.segVisits) || 'helmet', 16)} ${esc(T('segVisits'))}${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button></div>`;
+  const seg = `<div class="seg mapseg reveal"><button type="button" data-mt="live" class="${mapTab === 'live' ? 'on' : ''}">${ic('live', 16)} لايف لوكيشن${onN ? ` <i class="onl"><b></b>${ar(onN)} online</i>` : ''}</button>${isWatchOnly() ? `<button type="button" data-back="1">${ic('eye', 16)} رجوع للمتابعة</button>` : `<button type="button" data-mt="visits" class="${mapTab === 'visits' ? 'on' : ''}">${ic((UI.icons && UI.icons.segVisits) || 'helmet', 16)} ${esc(T('segVisits'))}${todayN ? ` <i class="segn">${ar(todayN)}</i>` : ''}</button>`}</div>`;
   if (mapTab === 'visits') {
     v.innerHTML = seg + `<section class="card reveal" style="margin-top:12px">
       <h2>تسجيلات قسم الإشراف <span class="muted small" id="vsCount" style="font-family:var(--f-body)"></span></h2>
@@ -1848,12 +1996,12 @@ function renderMap() {
   v.innerHTML = seg + `<section class="card reveal" style="margin-top:12px">
     <h2>لايف لوكيشن <span class="muted small" id="mpCount" style="font-family:var(--f-body)"></span></h2>
     <div class="map tall" id="ownMap"></div>
-    <label class="switch"><input type="checkbox" id="mpEvery" ${liveEvery() ? 'checked' : ''}><span>إشعار مع كل تحديث في اللايف (مرة كل دقيقة بحد أقصى لكل موظف)</span></label>
+    ${isWatchOnly() ? '' : `<label class="switch"><input type="checkbox" id="mpEvery" ${liveEvery() ? 'checked' : ''}><span>إشعار مع كل تحديث في اللايف (مرة كل دقيقة بحد أقصى لكل موظف)</span></label>`}
     <div class="lvhead"><b>اللي شغّالين لايف لوكيشن</b><span class="muted small">اضغط على أي اسم لتفاصيل مكانه والاتجاهات</span></div>
     <div id="mpList" class="lvtable"></div>
   </section>`;
-  v.querySelector('.mapseg').onclick = e => { const b = e.target.closest('[data-mt]'); if (b && b.dataset.mt !== mapTab) { mapTab = b.dataset.mt; renderMap(); } };
-  $('mpEvery').onchange = e => { try { localStorage.setItem('sh-live-every', e.target.checked ? '1' : '0'); } catch (x) { } askNotify(); };
+  v.querySelector('.mapseg').onclick = e => { if (e.target.closest('[data-back]')) { openTab('vWatch'); return; } const b = e.target.closest('[data-mt]'); if (b && b.dataset.mt !== mapTab) { mapTab = b.dataset.mt; renderMap(); } };
+  if ($('mpEvery')) $('mpEvery').onchange = e => { try { localStorage.setItem('sh-live-every', e.target.checked ? '1' : '0'); } catch (x) { } askNotify(); };
   $('mpList').onclick = e => { const b = e.target.closest('[data-focus]'); if (!b) return; openLiveSheet(b.dataset.focus); };
   ownMarks = {}; ownLines = {}; ownMap = null;
   loadLeaflet().then(L => {
@@ -2020,7 +2168,7 @@ function paintChat(jump) {
   msgs.forEach(m => {
     const dk = keyOfIdx(dayIdx(m.atMs)); if (dk !== lastDay) { lastDay = dk; h += `<div class="dsep"><span>${isToday(dk) ? 'اليوم' : dFmt.format(fromKey(dk))}</span></div>`; }
     const mine = m.uid === me.uid;
-    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who${canSee() && !m.owner && empById(m.uid) ? ' whob" role="button" tabindex="0" data-whouid="' + esc(m.uid) + '" title="عرض ملف ' + esc(m.name || '') : ''}" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
+    h += `<div class="msg ${mine ? 'mine' : ''} ${m.owner ? 'boss' : ''}"><div class="who${(canSee() || isWatch) && !m.owner && empById(m.uid) ? ' whob" role="button" tabindex="0" data-whouid="' + esc(m.uid) + '" title="عرض ملف ' + esc(m.name || '') : ''}" style="--wc:${m.owner ? 'var(--gold)' : nameColor(m.uid)}"><span class="wav">${(m.ph || (empById(m.uid) || {}).photoSm) ? `<img src="${m.ph || empById(m.uid).photoSm}" alt="">` : esc(initials(m.name || '؟'))}</span><b>${mine ? 'أنت' : esc(m.name)}</b>${m.dept ? `<small>${esc(m.dept)}</small>` : ''}${m.owner ? ' <i>المالك</i>' : ''}</div>${mediaHTML(m)}${m.text ? `<div class="txt">${esc(m.text).replace(/\n/g, '<br>')}</div>` : ''}<div class="at">${m.edited ? '<i class="edited">معدّلة</i> ' : ''}${clockFmt.format(new Date(m.atMs))}${mine || isOwner ? ` <button class="mact" data-mact="${m.id}" aria-label="خيارات الرسالة">${ic('dots', 14)}</button>` : ''}</div></div>`;
   });
   box.innerHTML = h || `<div class="empty">${ic('chat', 28, 1.4)}<b>ابدأ المحادثة</b><span>الرسائل هنا يشوفها كل موظفي الشركة والمالك، وتقدر تبعت صور ورسايل صوتية.</span></div>`;
   if (jump || atBottom) box.scrollTop = box.scrollHeight;
@@ -2300,7 +2448,7 @@ function checkOwnerAlerts() {
 let sheetEmp = null;
 function openSheet(id) {
   const emp = empById(id); if (!emp) return; sheetEmp = id; liveSheetId = null;
-  if (isViewer) {
+  if (isViewer || isWatchOnly()) {
     const sh = $('sheet'), sc = $('scrim'), inner = $('sheetInner'), r = getRec(emp, todayKey()), av = r && ALL.map(f => r.ph[f]).filter(Boolean).pop();
     inner.innerHTML = `<div class="sh-head"><div class="av">${av ? `<img src="${av}" alt="">` : esc(initials(emp.name))}</div><b>${esc(emp.name)} <span class="muted small">${esc(emp.dept || '')}</span></b><button class="navb" id="shClose" aria-label="إغلاق">${ic('x', 16)}</button></div>${profInfo(emp)}${todayCard(emp)}<div class="card" style="padding:16px"><div id="shProf"></div></div>`;
     sh.hidden = false; sc.hidden = false; requestAnimationFrame(() => { sh.classList.add('on'); sc.classList.add('on'); });
@@ -2422,7 +2570,7 @@ function openSheet(id) {
   };
   $('cSave').onclick = async () => {
     const data = { methods: $('cMeth').value, punchSite: $('cPSite').value, liveSite: $('cLSite').value };
-    if ($('cSchM').value === 'custom') { const { out, bad } = readSched($('cSched')); if (bad) { $('cErr').textContent = bad; return; } data.sched = { mode: 'custom', days: out }; }
+    if ($('cSchM').value === 'custom') { const { out, bad, warn } = readSched($('cSched')); if (bad) { $('cErr').textContent = bad; return; } const sig = JSON.stringify(out); if (warn && $('cSave').dataset.ok !== sig) { $('cSave').dataset.ok = sig; $('cErr').textContent = warn; return; } data.sched = { mode: 'custom', days: out }; }
     else data.sched = { mode: 'global' };
     try { await updateDoc(doc(db, 'employees', emp.id), data); $('cErr').textContent = ''; toast('ok', 'تم حفظ إعدادات ' + emp.name, data.sched.mode === 'custom' ? 'بدوام خاص بيه' : 'بالدوام العام', 'الإدارة'); }
     catch (x) { $('cErr').textContent = errWhy(x); }
@@ -2487,9 +2635,9 @@ function schedRowHTML(d, c) {
     return `<div class="sday ${c.on ? '' : 'isoff'}" data-d="${d}">
       <div class="sdh"><b>${DAYS[d]}</b><label class="switch sm"><input type="checkbox" data-k="on" ${c.on ? 'checked' : ''}><span>يوم عمل</span></label></div>
       <div class="sdb">
-       <div class="tp"><label>الفترة الأولى</label><div><input type="time" data-k="s1" value="${c.s1 != null ? hhmm(c.s1) : '09:00'}"><span>إلى</span><input type="time" data-k="e1" value="${c.e1 != null ? hhmm(c.e1) : '13:00'}"></div></div>
+       <div class="tp"><label>الفترة الأولى</label><div><span class="tw"><input type="time" data-k="s1" value="${c.s1 != null ? hhmm(c.s1) : '09:00'}"><small class="tl${fromHHMM(c.s1 != null ? hhmm(c.s1) : '09:00') < 360 ? ' night' : ''}" data-tl="s1">${tm(fromHHMM(c.s1 != null ? hhmm(c.s1) : '09:00'))}</small></span><span>إلى</span><span class="tw"><input type="time" data-k="e1" value="${c.e1 != null ? hhmm(c.e1) : '13:00'}"><small class="tl${fromHHMM(c.e1 != null ? hhmm(c.e1) : '13:00') < 360 ? ' night' : ''}" data-tl="e1">${tm(fromHHMM(c.e1 != null ? hhmm(c.e1) : '13:00'))}</small></span></div></div>
        <label class="switch sm"><input type="checkbox" data-k="two" ${two ? 'checked' : ''}><span>فترة ثانية (بعد البريك)</span></label>
-       <div class="tp" data-two ${two ? '' : 'hidden'}><label>الفترة الثانية</label><div><input type="time" data-k="s2" value="${two ? hhmm(c.s2) : '16:00'}"><span>إلى</span><input type="time" data-k="e2" value="${two ? hhmm(c.e2) : '20:00'}"></div></div>
+       <div class="tp" data-two ${two ? '' : 'hidden'}><label>الفترة الثانية</label><div><span class="tw"><input type="time" data-k="s2" value="${two ? hhmm(c.s2) : '16:00'}"><small class="tl${fromHHMM(two ? hhmm(c.s2) : '16:00') < 360 ? ' night' : ''}" data-tl="s2">${tm(fromHHMM(two ? hhmm(c.s2) : '16:00'))}</small></span><span>إلى</span><span class="tw"><input type="time" data-k="e2" value="${two ? hhmm(c.e2) : '20:00'}"><small class="tl${fromHHMM(two ? hhmm(c.e2) : '20:00') < 360 ? ' night' : ''}" data-tl="e2">${tm(fromHHMM(two ? hhmm(c.e2) : '20:00'))}</small></span></div></div>
       </div></div>`;
 }
 // ملخص الدوام: كل يوم ومواعيده
@@ -2498,7 +2646,7 @@ function schedSummary(emp) {
   return `<b>${emp && emp.sched && emp.sched.mode === 'custom' ? 'دوامه الخاص' : 'الدوام العام للشركة'} (بيتعدّل من ${emp && emp.sched && emp.sched.mode === 'custom' ? 'هنا' : 'الإعدادات ← مواعيد العمل'})</b>` + L.map(([d, t]) => `<div><span>${d}</span><span>${t}</span></div>`).join('');
 }
 function readSched(root) {
-  const out = {}; let bad = '';
+  const out = {}; let bad = '', warn = '';
     root.querySelectorAll('.sday').forEach(el => {
       const d = el.dataset.d, q = k => el.querySelector(`[data-k="${k}"]`);
       if (!q('on').checked) { out[d] = { on: false }; return; }
@@ -2512,10 +2660,12 @@ function readSched(root) {
       }
       if (s1 < 30) { bad = bad || 'بداية الدوام يوم ' + DAYS[d] + ' لازم تكون بعد ١٢:٣٠ ص'; return; }
       out[d] = o;
+      if (s1 < 360 || (o.s2 != null && o.s2 < 360)) warn = warn || 'خلي بالك: الدوام يوم ' + DAYS[d] + ' بيبدأ ' + tm(o.s2 != null && o.s2 < 360 ? o.s2 : s1) + ' (بالليل/الفجر). لو قصدك العصر غيّرها لـ «م». لو صح دوس حفظ تاني.';
     });
-  return { out, bad };
+  return { out, bad, warn };
 }
 function schedBind(root) {
+  root.oninput = e => { const k = e.target.dataset && e.target.dataset.k, l = k && e.target.parentNode.querySelector('[data-tl="' + k + '"]'); if (l) { const v = fromHHMM(e.target.value); l.textContent = v == null ? '' : tm(v); l.classList.toggle('night', v != null && v < 360); } };
   root.onchange = e => {
     const d = e.target.closest('.sday'); if (!d) return;
     if (e.target.dataset.k === 'on') d.classList.toggle('isoff', !e.target.checked);
@@ -2616,16 +2766,12 @@ function renderSet() {
     catch (x) { $('gErr').textContent = 'تعذّر الحفظ'; }
   };
   // schedule
-  const sch = $('sched');
-  sch.onchange = e => {
-    const d = e.target.closest('.sday'); if (!d) return;
-    if (e.target.dataset.k === 'on') d.classList.toggle('isoff', !e.target.checked);
-    if (e.target.dataset.k === 'two') d.querySelector('[data-two]').hidden = !e.target.checked;
-  };
+  const sch = $('sched'); schedBind(sch);
   $('schReset').onclick = async () => { try { await setDoc(doc(db, 'settings', 'main'), { sched: DEF_SCHED }, { merge: true }); toast('ok', 'رجعت المواعيد الافتراضية', '', 'الإعدادات'); renderSet(); } catch (x) { $('schErr').textContent = 'تعذّر الحفظ'; } };
   $('schSave').onclick = async () => {
-    const { out, bad } = readSched(sch);
+    const { out, bad, warn } = readSched(sch);
     if (bad) { $('schErr').textContent = bad; return; }
+    const sig = JSON.stringify(out); if (warn && $('schSave').dataset.ok !== sig) { $('schSave').dataset.ok = sig; $('schErr').textContent = warn; return; }
     try { await setDoc(doc(db, 'settings', 'main'), { sched: out }, { merge: true }); $('schErr').textContent = ''; toast('ok', 'تم حفظ مواعيد العمل', 'وصلت لكل الموظفين فوراً', 'الإعدادات'); }
     catch (x) { $('schErr').textContent = 'تعذّر الحفظ'; }
   };
@@ -2951,7 +3097,7 @@ function startSession(u) {
     renderMsg('جارٍ تحميل البيانات…', '');
     let gotEmps = false;
     unsubs.push(onSnapshot(collection(db, 'employees'), s => {
-      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? viewerName.split(' ')[0] : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
+      emps = s.docs.map(empFromDoc); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? name2(viewerName) : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
     }, err => renderMsg('تعذّر تحميل الموظفين', 'تأكد من لصق قواعد الحماية في Firebase وأن رقم المالك صحيح.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', yearStart)), onDays, () => { }));
     unsubs.push(onSnapshot(collection(db, 'live'), onLive, () => { }));
@@ -2968,7 +3114,7 @@ function startSession(u) {
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
       if (!meEmp.photo && !meEmp.profileDone) { if (view !== 'vSetup') renderSetup(); first = true; return; }
-      if (first || !['vEmp', 'vLive', 'vChat', 'vMe', 'vWatch'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(meEmp.name.split(' ')[0]); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
+      if (first || !['vEmp', 'vLive', 'vChat', 'vMe', 'vWatch'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(name2(meEmp.name)); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
       else if (view === 'vEmp') updateEmpLive(true);
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('uid', '==', u.uid)), onDays, () => { }));
