@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=33';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=34';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -1074,12 +1074,13 @@ function renderWatch() {
   v.innerHTML = `<div class="hello reveal"><b>${ic('eye', 20)} المتابعة</b><span>مشاهدة فقط · ${esc(COMPANY)}</span></div>
    <div class="seg wseg reveal"><button type="button" data-ws="att" class="${wSeg === 'att' ? 'on' : ''}">${ic('users', 16)} الحضور</button><button type="button" data-ws="live">${ic('live', 16)} لايف لوكيشن <i class="onl" id="wOnl"></i></button><button type="button" data-ws="rep" class="${wSeg === 'rep' ? 'on' : ''}">${ic('chart', 16)} التقارير</button></div>
    ${wSeg === 'att' ? `<section class="card reveal" style="margin-top:12px"><div class="fl"><label for="wDayIn">اليوم</label><input type="date" id="wDayIn" value="${k}" max="${todayKey()}"></div>
-    <div class="okpis" id="wK"></div><div id="wBar"></div><div class="wlist" id="wList"></div></section>` : exportCardHTML()}`;
+    <div class="okpis" id="wK"></div><div id="wBar"></div>${searchBox('wQ')}<div class="wlist" id="wList"></div></section>` : exportCardHTML()}`;
   v.querySelector('.wseg').onclick = e => { const b = e.target.closest('[data-ws]'); if (!b) return; if (b.dataset.ws === 'live') { mapTab = 'live'; openTab('vMap'); return; } if (b.dataset.ws !== wSeg) { wSeg = b.dataset.ws; renderWatch(); } };
   if (wSeg === 'att') {
     $('wDayIn').onchange = e => { wDay = e.target.value || null; paintWatch(); };
     $('wK').onclick = e => { const b = e.target.closest('[data-wf]'); if (!b) return; wFilter = b.dataset.wf === 'all' || wFilter === b.dataset.wf ? 'all' : b.dataset.wf; paintWatch(); };
     $('wList').onclick = e => { const b = e.target.closest('[data-wemp]'); if (b) openSheet(b.dataset.wemp); };
+    bindSearch('wQ', $('wList'));
     $('wBar').onclick = e => { if (e.target.closest('#wfClear')) { wFilter = 'all'; paintWatch(); } };
   } else bindExport();
   paintWatch();
@@ -1096,8 +1097,9 @@ function paintWatch() {
   const order = { leave: 7, notyet: 1, absent: 0, vlate: 1, late: 2, wait: 3, early: 4, ok: 5, extra: 6, off: 7 };
   el.innerHTML = list.length ? list.sort((a, b) => order[a.d.s] - order[b.d.s]).map(({ e, d }) => {
     const r = d.r, P = d.P || planKey(k, e), times = r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : '', lv = online(lives[e.id]);
-    return `<button type="button" class="wrow" data-wemp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span>${lv ? ' <i class="onl"><b></b>لايف</i>' : ''}</b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}<small class="sexp">${esc(shiftExplain(e, k))}</small></div></button>`;
+    return `<button type="button" class="wrow" data-wemp="${e.id}" data-q="${esc(empHay(e))}"><div class="av ${lv ? 'liveav' : ''}">${e.photoSm ? `<img src="${e.photoSm}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="chip ${DS[d.s][1]}">${DS[d.s][0]}</span>${lv ? ' <i class="onl"><b></b>لايف</i>' : ''}</b><small class="muted">${esc(e.dept || '')}</small>${times ? `<div class="tvs">${times}</div>` : ''}${r && (r.note || r.note2) ? `<small class="lnote">السبب: ${esc(r.note || r.note2)}</small>` : ''}<small class="sexp">${esc(shiftExplain(e, k))}</small></div></button>`;
   }).join('') : '<p class="muted small" style="text-align:center;margin:12px 0">مفيش موظفين هنا</p>';
+  applySearch(el, 'wQ');
 }
 let repP = 'month', repLast = null;
 function exportCardHTML() {
@@ -2322,8 +2324,27 @@ const SF = {
   leave: e => !!onLeave(e, todayKey()),
   live: e => online(lives[e.id])
 };
+// البحث عن موظف
+let empQ = '';
+const normQ = t => toEn(String(t || '')).toLowerCase().replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/\s+/g, ' ').trim();
+const empHay = e => normQ([e.name, e.num, e.dept, e.phone, e.jobTitle].join(' '));
+const searchBox = id => `<label class="esearch">${ic('search', 16)}<input id="${id}" type="search" placeholder="ابحث باسم الموظف أو القسم أو الجوال" value="${esc(empQ)}" autocomplete="off"><button type="button" class="esx" data-esx="${id}" aria-label="مسح البحث" ${empQ ? '' : 'hidden'}>${ic('x', 14)}</button></label>`;
+function applySearch(listEl, inputId) {
+  if (!listEl) return; const q = normQ(empQ), parts = q ? q.split(' ') : [];
+  let n = 0; listEl.querySelectorAll('[data-q]').forEach(r => { const ok = parts.every(p => r.dataset.q.includes(p)); r.hidden = !ok; if (ok) n++; });
+  let em = listEl.querySelector('.qempty'); if (!em) { em = document.createElement('p'); em.className = 'qempty muted small'; listEl.appendChild(em); }
+  em.hidden = !(q && !n); em.textContent = 'مفيش موظف بالاسم ده «' + empQ + '»';
+  const x = document.querySelector(`[data-esx="${inputId}"]`); if (x) x.hidden = !empQ;
+}
+function bindSearch(inputId, listEl) {
+  const i = $(inputId); if (!i) return;
+  i.oninput = () => { empQ = i.value; applySearch(listEl, inputId); };
+  const x = document.querySelector(`[data-esx="${inputId}"]`); if (x) x.onclick = () => { empQ = ''; i.value = ''; applySearch(listEl, inputId); i.focus(); };
+  applySearch(listEl, inputId);
+}
 function renderOwner() {
-  try { renderOwnerInner(); } catch (e) { console.error(e); show('vOwn'); $('vOwn').innerHTML = `<section class="card"><h2>حصلت مشكلة في عرض الرئيسية</h2><p class="muted small">صوّر الرسالة دي وابعتها: ${esc(String(e && e.message || e))}</p></section>`; }
+  const hadF = document.activeElement && document.activeElement.id === 'empQ';
+  try { renderOwnerInner(); if (hadF && $('empQ')) { const i = $('empQ'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); } } catch (e) { console.error(e); show('vOwn'); $('vOwn').innerHTML = `<section class="card"><h2>حصلت مشكلة في عرض الرئيسية</h2><p class="muted small">صوّر الرسالة دي وابعتها: ${esc(String(e && e.message || e))}</p></section>`; }
 }
 function renderOwnerInner() {
   show('vOwn');
@@ -2355,14 +2376,14 @@ function renderOwnerInner() {
   </div>
   <div class="grid two ${stFilter !== 'all' ? 'filtering' : ''}">
    <section class="card reveal" style="animation-delay:.1s">
-    <h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>
+    <div class="emphead"><h2>الموظفون <span class="muted small" style="font-family:var(--f-body)">${deptFilter === 'all' ? 'كل الأقسام' : 'قسم ' + deptFilter} · التزام الشهر</span></h2>${searchBox('empQ')}</div>
     ${stFilter !== 'all' ? `<div class="sfbar">${ic('search', 14)} بيعرض: <b>${({ present: 'الحاضرين', absent: 'الغايبين (عدّى ساعة على دوامهم ومسجّلوش)', late: 'المتأخرين واللي لسه ما وصلوش (قبل ما تعدّي ساعة)', early: 'اللي حضروا قبل نهاية فترة السماح (مثلاً لحد ' + tm((P.start || 540) + grace()) + ')', leave: 'اللي في إجازة', live: 'اللي شغّالين لايف لوكيشن دلوقتي' })[stFilter]}</b><button type="button" id="sfClear">${ic('x', 13)} الكل</button></div>` : ''}
     <div id="empList">${list.length ? list.map(e => {
       const s = liveStatus(e), r = getRec(e, key), o = stats(e, ma, mb), P = todayPlan(e);
       const eb = earlyBy(r, P), lb = r && r.in != null && !P.off && r.in > P.start + grace() ? r.in - P.start : 0;
       const line = (!e.active ? 'الحساب موقوف' : r ? ALL.filter(f => r[f] != null).map(f => tv(f, r, P, true)).join(' ') : (s === 'off' ? 'إجازة' : 'لا توجد بصمة اليوم')) + (eb ? ` · <em class="early">بدري ${dur(eb)}</em>` : lb ? ` · <em class="lateby">متأخر ${dur(lb)}</em>` : '') + (r && (r.note || r.note2) ? ` · <em class="lnote">السبب: ${esc(r.note || r.note2)}</em>` : '');
       const av = e.photoSm || e.photo || (r && ALL.map(f => r.ph[f]).filter(Boolean).pop()); const lv = fresh(lives[e.id]);
-      return `<button class="emp" data-emp="${e.id}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span>${e.active ? `<small class="sexp">${esc(shiftExplain(e, key))}</small>` : ''}</div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
+      return `<button class="emp" data-emp="${e.id}" data-q="${esc(empHay(e))}"><div class="av ${lv ? 'liveav' : ''}">${av ? `<img src="${av}" alt="">` : esc(initials(e.name))}</div><div class="info"><b>${esc(e.name)} <span class="muted small">${esc(e.dept || 'بدون قسم')}</span></b><span>${line}</span>${e.active ? `<small class="sexp">${esc(shiftExplain(e, key))}</small>` : ''}</div><span class="chip c-${s}">${STL[s]}</span><div class="mini"><small class="num">${o.days ? ar(o.pct) + '٪' : '—'}</small><div class="t"><div data-w="${o.pct}" style="background:${o.pct >= 90 ? 'var(--ok)' : o.pct >= 75 ? 'var(--warn)' : 'var(--bad)'}"></div></div></div></button>`;
     }).join('') : `<div class="empty">${ic('userplus', 28, 1.4)}<b>${emps.length ? 'لا يوجد موظفون في هذا القسم' : isViewer ? 'لا يوجد موظفون بعد' : 'أضف أول موظف'}</b><span>اكتب الاسم واسم المستخدم والقسم وكلمة سر مؤقتة، وابعتها للموظف مع رابط التطبيق.</span></div>`}</div>
     ${isViewer ? '' : `<form class="form addform" id="addForm" novalidate>
      <div class="fl"><label for="nName">اسم الموظف</label><input id="nName" autocomplete="off" placeholder="أحمد محمد"></div>
@@ -2383,6 +2404,7 @@ function renderOwnerInner() {
   requestAnimationFrame(() => requestAnimationFrame(() => v.querySelectorAll('[data-w]').forEach(d => d.style.transform = `scaleX(${d.dataset.w / 100})`)));
   renderFeed(false); updateBands();
   $('empList').onclick = e => { const b = e.target.closest('[data-emp]'); if (b) openSheet(b.dataset.emp); };
+  bindSearch('empQ', $('empList'));
   v.querySelectorAll('[data-sf]').forEach(b => b.onclick = () => { stFilter = b.dataset.sf === 'all' || stFilter === b.dataset.sf ? 'all' : b.dataset.sf; renderOwner(); setTimeout(() => { const el = $('empList'); el && el.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); }, 80); });
   if ($('sfClear')) $('sfClear').onclick = () => { stFilter = 'all'; renderOwner(); };
   v.querySelector('.depts').onclick = e => { const b = e.target.closest('[data-dept]'); if (!b) return; deptFilter = b.dataset.dept; renderOwner(); };

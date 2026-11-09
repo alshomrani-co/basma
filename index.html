@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=33">
+<link rel="manifest" href="manifest.json?v=34">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -879,6 +879,17 @@ button.wrow:active{background:var(--surface2)}
 @media (max-width:600px){.reptbl .rr{grid-template-columns:1.8fr repeat(5,1fr);font-size:12px;padding:8px 6px}}
 .camtag{display:flex;align-items:center;gap:6px;padding:0 14px;height:40px;border-radius:20px;background:rgba(0,0,0,.45);color:#fff;font-size:13px;font-weight:600}
 .camb.ghostb{background:none}
+.emphead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.emphead h2{margin:0}
+.esearch{display:flex;align-items:center;gap:6px;flex:1;min-width:200px;max-width:340px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:0 10px;color:var(--muted)}
+.esearch:focus-within{border-color:var(--gold);box-shadow:0 0 0 3px rgba(215,38,43,.12)}
+.esearch input{flex:1;border:0;background:none;padding:10px 0;font:inherit;color:var(--fg);outline:none;min-width:0}
+.esearch input::-webkit-search-cancel-button{display:none}
+.esx{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--line);color:var(--fg);border:0}
+#wQ{} .wlist{margin-top:4px}
+.card > .esearch{max-width:none;margin:10px 0 6px}
+.qempty{text-align:center;margin:14px 0}
+@media (max-width:600px){.esearch{max-width:none;min-width:100%}}
 </style>
 </head>
 <body>
@@ -948,6 +959,6 @@ button.wrow:active{background:var(--surface2)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=33"></script>
+<script type="module" src="app.js?v=34"></script>
 </body>
 </html>
