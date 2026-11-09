@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=25">
+<link rel="manifest" href="manifest.json?v=26">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -784,6 +784,35 @@ body.chatmode .chatcard h2{margin-bottom:6px}
 .icgrid button svg{color:var(--gold)}.icgrid button small{font-size:11px;color:var(--muted)}
 .icgrid button.on{border-color:var(--gold);background:var(--gold-soft)}
 input[type=range]{width:100%;accent-color:var(--gold)}
+
+/* الإعلان بينوّر */
+.notice{position:relative;border:2px solid var(--gold);animation:ntglow 2.2s ease-in-out infinite}
+@keyframes ntglow{0%,100%{box-shadow:0 0 0 0 rgba(215,38,43,.0),0 0 8px rgba(215,38,43,.35)}50%{box-shadow:0 0 0 4px rgba(215,38,43,.18),0 0 22px rgba(215,38,43,.55)}}
+/* فلتر الحالة */
+button.okpi{text-align:right;font:inherit;color:inherit;cursor:pointer;transition:transform .15s,border-color .2s,box-shadow .2s}
+button.okpi:active{transform:scale(.97)}
+button.okpi.sel{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+.okpi.e b{color:#1f8a70}.okpi.l b{color:#6a5acd}
+.sfbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:-4px 0 10px;padding:8px 12px;border-radius:12px;background:var(--gold-soft);font-size:13px}
+.sfbar button{margin-inline-start:auto;display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--gold)}
+.emp .info .sexp{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+/* الإجازات */
+.c-leave{background:rgba(106,90,205,.14);color:#5a4bc2}
+.leavecard{display:flex;gap:12px;align-items:center;width:100%;max-width:380px;margin:12px auto 0;padding:12px 14px;border-radius:14px;background:rgba(106,90,205,.1);border:1.5px solid rgba(106,90,205,.4);color:var(--fg);text-align:right}
+.leavecard svg{color:#6a5acd;flex:none}.leavecard span{display:flex;flex-direction:column}.leavecard small{color:var(--muted);font-size:12px}
+.lvrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.lvrow div{flex:1;display:flex;flex-direction:column}.lvrow small{font-size:12px;color:var(--muted)}
+.lvrow.now b{color:#5a4bc2}
+/* كروت التسجيل */
+.pcards{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.pcard{display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.pimg{width:64px;height:64px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
+.pimg img{width:100%;height:100%;object-fit:cover}
+.pimg.sm{width:42px;height:42px;display:inline-grid;vertical-align:middle}
+.pi{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.pi b{font-size:14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pi small{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.pi .lnk{font-size:12px}
+/* اللايف */
+.lvmini{height:190px;border-radius:14px;overflow:hidden;margin:10px 0;border:1px solid var(--line);background:var(--surface2)}
 @media (max-width:520px){.clockbar .t{font-size:22px}.brand b{font-size:15px}}
 </style>
 </head>
@@ -854,6 +883,6 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=25"></script>
+<script type="module" src="app.js?v=26"></script>
 </body>
 </html>
