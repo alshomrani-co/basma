@@ -8,7 +8,7 @@
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta name="description" content="نظام الحضور والانصراف لشركة سعد مفرح الشمراني للاستشارات الهندسية">
 <title>بصمة الشمراني</title>
-<link rel="manifest" href="manifest.json?v=36">
+<link rel="manifest" href="manifest.json?v=38">
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="logo-180.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -915,6 +915,12 @@ button.wrow:active{background:var(--surface2)}
 .seen.ok{color:#2f8fd8}
 .mgrsel{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:12px;font-size:13px}
 .mgrsel select{border:0;background:none;font:inherit;padding:0 4px;color:var(--fg)}
+.perms{margin:12px 0 4px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--surface2)}
+.perms .gt{display:block;margin-bottom:6px}
+.pmrow{display:flex;align-items:flex-start;gap:8px;padding:6px 0;color:var(--bad)}
+.pmrow.ok{color:var(--ok)}
+.pmrow span{display:flex;flex-direction:column;color:var(--fg)}
+.pmrow small{color:var(--muted);font-size:11px}
 </style>
 </head>
 <body>
@@ -984,6 +990,6 @@ button.wrow:active{background:var(--surface2)}
 <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="سجل الموظف"><div class="grab"></div><div class="inner" id="sheetInner"></div></div>
 <input type="file" id="cam" accept="image/*" capture="user" hidden>
 
-<script type="module" src="app.js?v=36"></script>
+<script type="module" src="app.js?v=38"></script>
 </body>
 </html>

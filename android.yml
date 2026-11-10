@@ -27,8 +27,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
-
       - name: Create Capacitor project
         run: |
           mkdir app && cd app
@@ -56,7 +54,8 @@ jobs:
           p = 'app/src/main/AndroidManifest.xml'
           s = open(p, encoding='utf-8').read()
           perms = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION',
-                   'POST_NOTIFICATIONS', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'USE_BIOMETRIC', 'WAKE_LOCK', 'VIBRATE', 'INTERNET']
+                   'POST_NOTIFICATIONS', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'USE_BIOMETRIC', 'WAKE_LOCK', 'VIBRATE', 'INTERNET',
+                   'ACCESS_BACKGROUND_LOCATION', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED']
           add = ''.join('    <uses-permission android:name="android.permission.%s" />\n' % x for x in perms if ('permission.' + x + '"') not in s)
           s = s.replace('</manifest>', add + '    <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>')
           open(p, 'w', encoding='utf-8').write(s)
@@ -71,13 +70,158 @@ jobs:
           open(g, 'w', encoding='utf-8').write(b)
           PY
           rm -rf app/src/main/res/mipmap-anydpi-v26
-          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            n=${d%%:*}; px=${d##*:}
-            mkdir -p app/src/main/res/mipmap-$n
-            convert ../../logo-512.png -resize ${px}x${px} app/src/main/res/mipmap-$n/ic_launcher.png
-            cp app/src/main/res/mipmap-$n/ic_launcher.png app/src/main/res/mipmap-$n/ic_launcher_round.png
-            cp app/src/main/res/mipmap-$n/ic_launcher.png app/src/main/res/mipmap-$n/ic_launcher_foreground.png
-          done
+          python3 -c "import PIL" 2>/dev/null || pip3 install --quiet --break-system-packages pillow
+          python3 - <<'PY'
+          from PIL import Image
+          src = Image.open('../../logo-512.png').convert('RGBA')
+          for n, px in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
+              im = src.resize((px, px), Image.LANCZOS)
+              for f in ('ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground'):
+                  im.save('app/src/main/res/mipmap-%s/%s.png' % (n, f))
+          PY
+
+      - name: Native permissions plugin (battery, background location, exact alarms)
+        run: |
+          cd app/android/app/src/main/java/com/alshomrani/basma
+          cat > MainActivity.java <<'JAVA'
+          package com.alshomrani.basma;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(ShamPerms.class);
+                  super.onCreate(savedInstanceState);
+              }
+          }
+          JAVA
+          cat > ShamPerms.java <<'JAVA'
+          package com.alshomrani.basma;
+
+          import android.Manifest;
+          import android.app.AlarmManager;
+          import android.content.Context;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.PowerManager;
+          import android.provider.Settings;
+          import androidx.activity.result.ActivityResult;
+          import androidx.core.app.NotificationManagerCompat;
+          import androidx.core.content.ContextCompat;
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.ActivityCallback;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+          import com.getcapacitor.annotation.Permission;
+          import com.getcapacitor.annotation.PermissionCallback;
+
+          @CapacitorPlugin(
+              name = "ShamPerms",
+              permissions = {
+                  @Permission(alias = "location", strings = { Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION }),
+                  @Permission(alias = "bg", strings = { "android.permission.ACCESS_BACKGROUND_LOCATION" }),
+                  @Permission(alias = "media", strings = { Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO })
+              }
+          )
+          public class ShamPerms extends Plugin {
+              private boolean has(String p) {
+                  return ContextCompat.checkSelfPermission(getContext(), p) == PackageManager.PERMISSION_GRANTED;
+              }
+              private boolean batteryOk() {
+                  if (Build.VERSION.SDK_INT < 23) return true;
+                  PowerManager pm = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+                  return pm != null && pm.isIgnoringBatteryOptimizations(getContext().getPackageName());
+              }
+              private boolean bgOk() {
+                  return Build.VERSION.SDK_INT < 29 || has("android.permission.ACCESS_BACKGROUND_LOCATION");
+              }
+              private boolean exactOk() {
+                  if (Build.VERSION.SDK_INT < 31) return true;
+                  AlarmManager am = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+                  return am != null && am.canScheduleExactAlarms();
+              }
+              private JSObject st() {
+                  JSObject r = new JSObject();
+                  r.put("notif", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
+                  r.put("loc", has(Manifest.permission.ACCESS_FINE_LOCATION));
+                  r.put("bgLoc", bgOk());
+                  r.put("battery", batteryOk());
+                  r.put("exact", exactOk());
+                  r.put("media", has(Manifest.permission.CAMERA) && has(Manifest.permission.RECORD_AUDIO));
+                  r.put("sdk", Build.VERSION.SDK_INT);
+                  r.put("maker", Build.MANUFACTURER);
+                  return r;
+              }
+              private Uri pkg() {
+                  return Uri.parse("package:" + getContext().getPackageName());
+              }
+              private void openForResult(PluginCall call, Intent i) {
+                  try { startActivityForResult(call, i, "actCb"); }
+                  catch (Exception e) {
+                      try { startActivityForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg()), "actCb"); }
+                      catch (Exception x) { call.resolve(st()); }
+                  }
+              }
+
+              @PluginMethod
+              public void status(PluginCall call) { call.resolve(st()); }
+
+              @PluginMethod
+              public void loc(PluginCall call) {
+                  if (has(Manifest.permission.ACCESS_FINE_LOCATION)) { call.resolve(st()); return; }
+                  requestPermissionForAlias("location", call, "permCb");
+              }
+
+              @PluginMethod
+              public void bgLoc(PluginCall call) {
+                  if (bgOk() || !has(Manifest.permission.ACCESS_FINE_LOCATION)) { call.resolve(st()); return; }
+                  requestPermissionForAlias("bg", call, "permCb");
+              }
+
+              @PluginMethod
+              public void media(PluginCall call) {
+                  if (has(Manifest.permission.CAMERA) && has(Manifest.permission.RECORD_AUDIO)) { call.resolve(st()); return; }
+                  requestPermissionForAlias("media", call, "permCb");
+              }
+
+              @PermissionCallback
+              private void permCb(PluginCall call) { call.resolve(st()); }
+
+              @PluginMethod
+              public void battery(PluginCall call) {
+                  if (batteryOk()) { call.resolve(st()); return; }
+                  openForResult(call, new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg()));
+              }
+
+              @PluginMethod
+              public void exact(PluginCall call) {
+                  if (exactOk()) { call.resolve(st()); return; }
+                  openForResult(call, new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, pkg()));
+              }
+
+              @PluginMethod
+              public void notif(PluginCall call) {
+                  Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                  i.putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+                  openForResult(call, i);
+              }
+
+              @PluginMethod
+              public void appSettings(PluginCall call) {
+                  openForResult(call, new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg()));
+              }
+
+              @ActivityCallback
+              private void actCb(PluginCall call, ActivityResult result) { call.resolve(st()); }
+          }
+          JAVA
+          ls -la
 
       - name: Signing key (fixed, so updates install over the old app)
         run: |

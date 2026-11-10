@@ -1,4 +1,4 @@
-import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=36';
+import { firebaseConfig, OWNER_UID, EMAIL_DOMAIN } from './config.js?v=38';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence, setPersistence, onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, updatePassword, deleteUser, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, onSnapshot, collection, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteField, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -350,7 +350,50 @@ function toast(kind, title, body, who, go) {
 /* ========== نسخة الأندرويد (APK): لايف في الخلفية، إشعارات الجوال، بصمة حقيقية ========== */
 const CAP = window.Capacitor, NATIVE = !!(CAP && typeof CAP.isNativePlatform === 'function' && CAP.isNativePlatform());
 const plug = n => { try { return NATIVE && CAP.registerPlugin ? CAP.registerPlugin(n) : null; } catch (e) { return null; } };
-const BGeo = plug('BackgroundGeolocation'), LNot = plug('LocalNotifications'), NBio = plug('NativeBiometric'), NHttp = plug('CapacitorHttp');
+const BGeo = plug('BackgroundGeolocation'), LNot = plug('LocalNotifications'), NBio = plug('NativeBiometric'), NHttp = plug('CapacitorHttp'), SPerm = plug('ShamPerms');
+// أذونات الأندرويد: بتتطلب لوحدها واحدة ورا التانية، والموظف يدوس «سماح» بس
+const PERM_STEPS = [
+  ['notif', 'الإشعارات', 'عشان توصلك التنبيهات ورسايل الشات', 'دوس «سماح»'],
+  ['loc', 'الموقع', 'عشان البصمة واللايف لوكيشن', 'دوس «أثناء استخدام التطبيق»'],
+  ['bgLoc', 'الموقع طوال الوقت', 'عشان اللايف يفضل شغّال والشاشة مقفولة', 'اختار «السماح طوال الوقت» وارجع'],
+  ['battery', 'التشغيل في الخلفية', 'عشان الموبايل ما يقفلش التطبيق ويوقف الإشعارات واللايف', 'دوس «سماح»'],
+  ['exact', 'التنبيهات في ميعادها', 'عشان تذكير الحضور والصلاة يوصل في ميعاده بالظبط', 'فعّل «السماح» وارجع'],
+  ['media', 'الكاميرا والميكروفون', 'عشان صورة الموقع وصورتك والرسايل الصوتية', 'دوس «سماح» للاتنين']
+];
+let permBusy = false, permAuto = false;
+const permSteps = () => PERM_STEPS.filter(([k]) => !(canSee() && (k === 'loc' || k === 'bgLoc'))).filter(([k]) => k !== 'media' || permHasMedia);
+let permHasMedia = true;
+async function permStatus() { if (!NATIVE || !SPerm) return null; try { const st = await SPerm.status(); permHasMedia = st && 'media' in st; return st; } catch (e) { return null; } }
+async function permFlow(force) {
+  if (!NATIVE || !SPerm || permBusy || !me) return;
+  permBusy = true;
+  try {
+    for (const [k, title, why, how] of permSteps()) {
+      const st = await permStatus(); if (!st) return;
+      if (st[k]) continue;
+      const key = 'sh-perm-' + k; let last = 0; try { last = +(localStorage.getItem(key) || 0); } catch (e) { }
+      if (!force && Date.now() - last < 6 * 3600e3) continue;   // ما نطلبش نفس الإذن أكتر من مرة كل ٦ ساعات لوحده
+      try { localStorage.setItem(key, String(Date.now())); } catch (e) { }
+      toast('info', 'اسمح لـ ' + title, why + ' · ' + how, 'تجهيز التطبيق');
+      await new Promise(r => setTimeout(r, 1300));
+      try {
+        if (k === 'notif') { const r = LNot ? await LNot.requestPermissions() : null; if (!r || r.display !== 'granted') await SPerm.notif(); }
+        else await SPerm[k]();
+      } catch (e) { }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    const st = await permStatus();
+    if (st && permSteps().every(([k]) => st[k])) { if (force) toast('ok', 'التطبيق جاهز ✅', 'كل الأذونات متفعّلة', 'تجهيز التطبيق'); if (LNot) nativeSchedule(); }
+  } finally { permBusy = false; paintPerms(); }
+}
+async function paintPerms() {
+  const el = $('pmList'); if (!el) return; const st = await permStatus();
+  if (!st) { el.innerHTML = '<p class="muted small">حدّث تطبيق الأندرويد لآخر نسخة عشان تظهر حالة الأذونات هنا.</p>'; if ($('pmGo')) $('pmGo').hidden = true; return; }
+  const miss = permSteps().filter(([k]) => !st[k]).length;
+  el.innerHTML = permSteps().map(([k, t, w]) => `<div class="pmrow ${st[k] ? 'ok' : ''}">${ic(st[k] ? 'check' : 'alert', 15)}<span><b>${t}</b><small>${w}</small></span></div>`).join('');
+  if ($('pmGo')) { $('pmGo').hidden = !miss; $('pmGo').innerHTML = `${ic('check', 16)} اسمح بالأذونات الناقصة (${ar(miss)})`; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && NATIVE && me && !permBusy) { setTimeout(paintPerms, 400); setTimeout(() => permFlow(false), 1500); } });
 const APK_URL = 'https://github.com/alshomrani-co/basma/releases/latest/download/basma-shamrani.apk';
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 let bgWatch = null, natTok = null, natNid = 1;
@@ -766,13 +809,12 @@ function renderEmp() {
      <div class="next-label" id="nextLbl"></div>
      <div class="hint" id="hint"></div>
      <div class="actions">
-      ${methodOf(emp) !== 'finger' ? `<button class="btn primary" id="bTap">${ic('check', 18)} ${esc(T('faceBtn'))}</button>` : ''}
+      ${methodOf(emp) !== 'finger' ? `<button class="btn primary" id="bTap">${ic('finger', 18)} ${esc(T('faceBtn'))}</button>` : ''}
       ${methodOf(emp) !== 'tap' ? `<button class="btn ${methodOf(emp) === 'finger' ? 'primary' : 'ghost'}" id="bFp"${window.__bio ? '' : ' hidden'}>${ic('finger', 18)} ${esc(T('fpBtn'))}</button>` : ''}
       ${methodOf(emp) === 'finger' && !window.__bio ? '<p class="muted small" style="margin:0">بصمة الإصبع مش متاحة على الجوال ده. فعّلها من «حسابي» أو كلّم المدير.</p>' : ''}
      </div>
      <div class="devline" id="devline"></div>
      <div class="devline">${ic('pin', 13)} ${esc(geoRuleText(emp))}</div>
-     <button class="livecta ${liveOn ? 'on' : ''}" id="liveCta" type="button"><span class="lc-ic">${ic('live', 22)}</span><span class="lc-tx"><b>${esc(liveOn ? T('liveOn') : T('liveStart'))}</b><small>${liveOn ? 'المالك شايف مكانك الآن · اضغط للتفاصيل' : 'شارك مكانك المباشر مع المالك'}</small></span>${ic('left', 18)}</button>
      ${(() => { const lv = onLeave(emp, todayKey()); return lv ? `<div class="leavecard">${ic('calendar', 22)}<span><b>إنت في إجازة ${esc(LEAVE_T[lv.type] || '')} 🌴</b><small>العودة يوم ${dFmt.format(fromKey(lv.back))}${lv.note ? ' · ' + esc(lv.note) : ''}</small></span></div>` : ''; })()}
      <div id="lateSlot">${lateCardHTML()}</div>
      <div class="slots" id="slots" style="grid-template-columns:repeat(${P.off ? 4 : P.fields.length},minmax(0,1fr))"></div>
@@ -786,7 +828,6 @@ function renderEmp() {
    </section></div>`;
   mountProfile($('myProf'), emp, false);
   bindScan(); bindNotifCta(); updateEmpLive(true); updateBands(); bindLateCard();
-  $('liveCta').onclick = () => { vibrate(15); openTab('vLive'); if (!liveOn) startLive(); };
 }
 function bindLateCard() { const c = $('lateCard'); if (c) c.onclick = () => { const L = lateInfo(); if (L) openLateSheet(L.f, L.by); }; }
 function paintLateSlot() { const sl = $('lateSlot'); if (!sl) return; const h = lateCardHTML(); if (sl.dataset.h !== h) { sl.dataset.h = h; sl.innerHTML = h; bindLateCard(); } }
@@ -803,7 +844,7 @@ function updateEmpLive(full) {
   if (view !== 'vEmp' || !meEmp) return;
   const emp = meEmp, r = myRec(), n = nowMin(), key = todayKey(), P = todayPlan();
   const hr = Math.floor(n / 60);
-  const g = $('greet'); if (!g) return; paintLateSlot();
+  const g = $('greet'); if (!g) return; paintLateSlot(); paintPunchIcons();
   g.textContent = (hr < 12 ? T('morning') : T('evening')) + '، ' + name2(emp.name);
   const nf0 = nextField(r, P);
   let txt, col; const left = x => dur(x - n); const G = grace();
@@ -845,7 +886,14 @@ function updateEmpLive(full) {
 }
 
 const methodOf = e => (e && e.methods) || 'both';
-const coreIcon = () => `<span class="face">${ic(methodOf(meEmp) === 'finger' ? 'finger' : 'check', 70, 1.2)}</span>`;
+const coreKind = () => { try { const A = allowed(myRec(), nowMin(), todayPlan()); return A.f === 'out' ? 'logout' : 'finger'; } catch (e) { return 'finger'; } };
+const coreIcon = () => `<span class="face" data-k="${coreKind()}">${ic(coreKind(), 70, 1.2)}</span>`;
+// زرار التسجيل: أيقونة البصمة، ووقت الانصراف أيقونة انصراف
+function paintPunchIcons() {
+  if (busy) return; const k = coreKind(), c = $('core'), f = c && c.querySelector('.face');
+  if (c && (!f || f.dataset.k !== k) && !c.querySelector('img')) c.innerHTML = coreIcon();
+  const b = $('bTap'); if (b && b.dataset.k !== k) { b.dataset.k = k; b.innerHTML = `${ic(k, 18)} ${k === 'logout' ? 'انصراف' : esc(T('faceBtn'))}`; }
+}
 let pendingOut = null;
 // سبب الانصراف: إجباري قبل تسجيل الانصراف
 function outReasonSheet() {
@@ -1012,6 +1060,7 @@ function notifCardHTML() {
   return `<section class="card reveal notifcard" style="margin-top:14px"><h2>${ic('bell', 18)} إشعارات الجوال</h2>
    <div class="nstate" id="nState"><span class="muted small">جارٍ التحقق…</span></div>
    <div class="ndiag" id="nDiag"></div>
+   ${NATIVE ? `<div class="perms"><b class="gt">أذونات التطبيق</b><div id="pmList"><span class="muted small">جارٍ التحقق…</span></div><button class="btn primary" type="button" id="pmGo" hidden style="width:100%;margin-top:8px"></button></div>` : ''}
    <div class="row-btns" style="margin:10px 0"><button class="btn primary" type="button" id="nOn">${ic('bell', 16)} تفعيل الإشعارات</button><button class="btn ghost" type="button" id="nTest">${ic('check', 16)} إشعار تجريبي</button></div>
    ${row('att', 'الحضور والانصراف', canSee() ? 'مين حضر ومين اتأخر، والبريك والانصراف' : 'تذكير بتسجيل الحضور والعودة من البريك والانصراف')}
    ${row('chat', 'رسايل الشات', 'أي رسالة جديدة في الشات الداخلي')}
@@ -1037,7 +1086,8 @@ async function paintDiag(st) {
   el.innerHTML = `<b>تشخيص</b><span>الجهاز: ${dev}</span><span>الفتح: ${mode}${!iosOk ? ' ⚠️ على الآيفون لازم يتفتح من أيقونة الشاشة الرئيسية' : ''}</span><span>إذن الإشعارات: ${({ granted: 'مسموح ✅', denied: 'مرفوض ❌', default: 'لسه ما اتطلبش', unsupported: 'غير مدعوم ❌' })[st] || st}</span>${NATIVE ? '' : `<span>خدمة الإشعارات: ${sw}</span>`}${lastTest ? `<span>آخر إشعار تجريبي: ${lastTest}</span>` : ''}`;
 }
 function bindNotifCard() {
-  if (!$('nOn')) return; paintNotifState();
+  if (!$('nOn')) return; paintNotifState(); paintPerms();
+  if ($('pmGo')) $('pmGo').onclick = () => permFlow(true);
   $('nOn').onclick = async () => { const st = await enableNotifs(); paintNotifState(); if (st === 'granted') { toast('ok', 'تم تفعيل الإشعارات', 'هتوصلك في إشعارات الجوال', 'الإشعارات'); sysNotify('بصمة الشمراني', 'الإشعارات شغالة ✅', 'test', ''); } else if (st === 'denied') toast('bad', 'الإشعارات مرفوضة', 'فعّلها من إعدادات الجوال', 'الإشعارات'); };
   $('nTest').onclick = async () => {
     const st = await notifState(); if (st !== 'granted') { toast('warn', 'فعّل الإشعارات الأول', '', 'الإشعارات'); paintNotifState(); return; }
@@ -3353,7 +3403,7 @@ function startSession(u) {
     renderMsg('جارٍ تحميل البيانات…', '');
     let gotEmps = false;
     unsubs.push(onSnapshot(collection(db, 'employees'), s => {
-      emps = s.docs.map(empFromDoc); setTimeout(() => { subRooms(); if (isOwner) syncMyPeople(); }, 0); if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? name2(viewerName) : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
+      emps = s.docs.map(empFromDoc); setTimeout(() => { subRooms(); if (isOwner) syncMyPeople(); }, 0); if (NATIVE && !permAuto) { permAuto = true; setTimeout(() => permFlow(false), 2500); } if (!gotEmps) { gotEmps = true; renderOwner(); if (justLoggedIn) { justLoggedIn = false; welcome(isViewer ? name2(viewerName) : 'المالك'); } if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 600); } } else refresh();
     }, err => renderMsg('تعذّر تحميل الموظفين', 'تأكد من لصق قواعد الحماية في Firebase وأن رقم المالك صحيح.')));
     unsubs.push(onSnapshot(query(collection(db, 'days'), where('day', '>=', yearStart)), onDays, () => { }));
     unsubs.push(onSnapshot(collection(db, 'live'), onLive, () => { }));
@@ -3371,6 +3421,7 @@ function startSession(u) {
       if (!meEmp.active) { if (liveOn) stopLive(false); renderMsg('حسابك موقوف', 'تواصل مع المالك لإعادة تفعيله.'); first = true; return; }
       if (meEmp.mustChange) { renderPass(); first = true; return; }
       if (!meEmp.photo && !meEmp.profileDone) { if (view !== 'vSetup') renderSetup(); first = true; return; }
+      if (NATIVE && !permAuto) { permAuto = true; setTimeout(() => permFlow(false), 2500); }
       if (first || !['vEmp', 'vLive', 'vChat', 'vMe', 'vWatch'].includes(view)) { first = false; renderEmp(); if (justLoggedIn) { justLoggedIn = false; welcome(name2(meEmp.name)); } resumeLive(); if (pendingGo) { const g = pendingGo; pendingGo = null; history.replaceState(null, '', location.pathname); setTimeout(() => goTo(g), 400); } }
       else if (view === 'vEmp') updateEmpLive(true);
     }, () => renderMsg('تعذّر تحميل حسابك', 'تأكد من الاتصال بالإنترنت ثم أعد فتح التطبيق.')));
